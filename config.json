@@ -1,0 +1,75 @@
+{
+  "active": "48a",
+  "48a": {
+    "machine": {
+      "type": "48a",
+      "auto_start": 0,
+      "status": "start",
+      "rom0": "./support/roms/48.rom",
+      "rom1": "--",
+      "constrain": 1,
+      "background": 0
+    },
+    "tape": {
+      "enabled": true,
+      "auto_load": true,
+      "block": -1,
+      "converter": "basic"
+    },
+    "display": {
+      "zoom": 2,
+      "renderer": "tk"
+    },
+    "keyboard": {
+      "type": "standard"
+    },
+    "joystick": {
+      "detected": 0,
+      "enabled": 0,
+      "type": 1,
+      "left": "Q",
+      "right": "A",
+      "up": "O",
+      "down": "P",
+      "fire": "BREAK_SPACE"
+    },
+    "beeper": {
+      "muted": 0,
+      "stereo": 1,
+      "mode": ""
+    },
+    "ay": {
+      "muted": 0,
+      "a": {
+        "muted": 0
+      },
+      "b": {
+        "muted": 0
+      },
+      "c": {
+        "muted": 0
+      },
+      "stereo": 1
+    },
+    "usource": {
+      "enabled": 0,
+      "rom": "./support/roms/usource.rom"
+    },
+    "betadisk": {
+      "enabled": 0,
+      "rom": "./support/roms/trdos.rom"
+    },
+    "cartridge": {
+      "enabled": 0,
+      "rom": ""
+    },
+    "app": {
+      "window": {
+        "geometry": "640x520+867+513"
+      },
+      "editor": {
+        "geometry": "690x565+169+482"
+      }
+    }
+  }
+}

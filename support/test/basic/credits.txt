@@ -1,0 +1,11 @@
+matrix.bas 
+
+https://rosettacode.org/wiki/Matrix_digital_rain#ZX_Spectrum_Basic
+
+snake.bas 
+
+credits: https://github.com/mvanvuren/snaker/tree/master
+
+flags.bas
+
+ZXSpectrum 48 manual

@@ -1,0 +1,20 @@
+This 3rd party 8K ROM cartridge is a game for use with the Spectrum 16K, 48K, +, 128 and the grey Spectrum +2. It was ported to the Spectrum and then into an Interface 2 ROM cartridge using the z88dk C cross compiler by Henk Poley, Stefano Bodrato and Dominic Morris (based on a Z88 version created by Dominic Morris, itself based on a TI86 game written by Andrew Von Dollen, which was based on a HP game by Joe W). 
+
+
+The aim of the game is to collect all the clear bubbles by running over them. You control either the dark bubble or the solid box. The dark bubble is used to collect the clear bubbles, and the solid box is used as a sort of movable wall. Both objects carry on moving until they hit something else (except for the dark bubble in the case of clear bubbles).
+
+The keys are:
+
+    Q - Up
+    A - Down
+    O - Left
+    P - Right
+    G - Quit
+    H - Retry level
+    SPACE - Toggle between the dark bubble and the solid box
+    9 - Previous level
+    0 - Next level
+
+
+http://www.fruitcake.plus.com/Sinclair/Interface2/Cartridges/Interface2_RC_New_3rdParty_DeathStar.htm
+
