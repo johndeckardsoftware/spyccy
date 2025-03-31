@@ -143,11 +143,11 @@ UDG = {
 #!option = value
 #
 # options:
-#  prog_name = max 10 char (default: "SPYCCY B2T") 
+#  prog_name = max 10 char (default: "SPYCCY B2T")
 #  use_labels = 0, 1  	(default: 1)
 #  auto_start_line = n 	(run line number. default: 0x8000 no auto run)
 #  auto_inc = n			(line number increment when use_labels = 1. default: 2)
-#  first_line = n		(first line number when use_labels = 1. default: 2) 
+#  first_line = n		(first line number when use_labels = 1. default: 2)
 #
 # example:
 #!prog_name = "ZMAKEBAS"
@@ -703,3 +703,129 @@ def zmakebas(input, output, stdout=None):
 
     return True
 
+
+"""
+Call ZXBASIC Compiler
+default options: "--tap --BASIC --autorun"
+to override them insert before the first line of code:
+
+'!args=options'
+
+example:
+
+'!args=--tzx --BASIC --autorun
+10 PRINT "HELLO FROM SPYCCY!"
+
+https://zxbasic.readthedocs.io/en/docs/zxb/#Command_Line_Options
+
+"""
+
+from io import StringIO
+import sys
+
+try:
+    from zxbasic.src.zxbc import zxbc
+    zxbc.OPTIONS._options['max_syntax_errors'] = 9999 # to avoid sys.exit(1) with more than 20 errors
+    zx_basic_compiler = True
+except:
+    zx_basic_compiler = False
+
+def zxbasic(input, output=None, stdout=None):
+
+    if not zx_basic_compiler:
+        return 99, None, "ZXBASIC not installed"
+
+    # options
+    args = get_options(input)
+    if not args:
+        args = ["--tzx", "--BASIC", "--autorun"]
+
+    # output
+    out_format = ".tzx"
+    if "-t" in args or "--tap" in args:
+        out_format = "tap"
+    elif  "-T" in args or "--tzx" in args:
+        out_format = "tzx"
+    elif  "-A" in args:
+        out_format = "asm"
+
+    if not output:
+        output = f"{input}.{out_format}"
+
+    if "-o" not in args and "--output" not in args:
+        args.append("-o")
+        args.append(output)
+
+    # stdout
+    #if not stdout:
+    #    stdout = input + ".log"
+    #if "-e" not in args and "--errmsg" not in args:
+    #    args.append("-e")
+    #    args.append(stdout)
+    #errors = ""
+
+    old_stderr = sys.stderr
+    sys.stderr = mystderr = StringIO()
+
+    # input
+    args.append(input)
+
+    ret = zxbc.main(args)
+
+    sys.stderr = old_stderr
+
+    #if ret:
+    #    with open(stdout, 'r') as f:
+    #        errors = f.read()
+
+    return ret, out_format, mystderr.getvalue()
+
+def zxasm(input, output=None, stdout=None):
+
+    if not zx_basic_compiler:
+        return 99, None, "ZXBASIC not installed"
+
+    # options
+    args = get_options(input)
+    if not args:
+        args = ["-A"]
+    else:
+        args.append("-A")
+
+    #output
+    args.append("-o")
+    args.append(output)
+
+    old_stderr = sys.stderr
+    sys.stderr = mystderr = StringIO()
+
+    # input
+    args.append(input)
+
+    ret = zxbc.main(args)
+
+    sys.stderr = old_stderr
+
+    return ret, "asm", mystderr.getvalue()
+
+def get_options(input):
+    args = None
+    source = open(input, "r", encoding="utf-8")
+    lines = source.readlines()
+    i = 0
+    while True:
+        line = lines[i]
+        i += 1
+        if line is None:
+            break
+        if len(line) == 0:
+            continue
+        if line.startswith('\'!args='):
+            args = line[7:].split()
+        elif line.startswith('\''):
+            continue
+        else:
+            break
+    source.close()
+
+    return args

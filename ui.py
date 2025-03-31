@@ -13,6 +13,14 @@ import basic2tape
 import joystick
 from ay_tuning import AYTuning
 
+try:
+    from zxbasic.src.zxbc import version
+    zx_basic_compiler = True
+    print(f"ZXBASIC version {version.VERSION}" )
+except:
+    zx_basic_compiler = False
+    print ("ZXBASIC not detected")
+
 class StatusBar(tk.Frame):
     def __init__(self, master, color):
         tk.Frame.__init__(self, master, background = color)
@@ -197,7 +205,8 @@ class MainWindow():
         tape_menu.add_cascade(label='Select converter', menu=tape_conv, underline=0)
         tape_menu.add_command(label='Tape cat', command=self.tape_cat)
         tape_menu.add_separator()
-        tape_menu.add_command(label='BASIC to tap...', command=self.basic_to_tape)
+        tape_menu.add_command(label='Sinclair BASIC to tap...', command=self.basic_to_tape)
+        tape_menu.add_command(label='ZX BASIC to tap...', command=self.zxbasic_to_tape, state=self.zx_basic_state())
         self.tape_menu = tape_menu
         menubar.add_cascade(label='Tape', menu=tape_menu, underline=0)
 
@@ -467,6 +476,9 @@ class MainWindow():
     def sound_state(self):
         return 'normal' if self.vars['machine.type'].get() == "128" else 'disabled'
 
+    def zx_basic_state(self):
+        return 'normal' if zx_basic_compiler else 'disabled'
+
     def show_editor(self, file=None, text=None):
         if self.editor:
             if file:
@@ -528,6 +540,13 @@ class MainWindow():
         if file_path:
             #basic2tape.zmakebas(file_path, file_path+'.tap', "./tmp/zmakebas.log")
             basic2tape.zmakebas(file_path, file_path+'.tap', None)
+
+    def zxbasic_to_tape(self):
+        file_path = filedialog.askopenfilename(title='Select a file', filetypes=[('Basic', '*.bas'), ('All files', '*.*')])
+        if file_path:
+            ret, out_format, errors = basic2tape.zxbasic(file_path)
+            if ret:
+                messagebox.showerror("ZXBASIC to tape", errors)
 
     def open_snapshot_dialog(self):
         file_path = filedialog.askopenfilename(title='Select a file', filetypes=[('Snapshot', '*.z80 *.szx *.sna'), ('All files', '*.*')])
