@@ -1,12 +1,12 @@
 
-import os
+import os, re
 import tkinter as tk
 from tkinter import ttk
 from tkinter import filedialog
 from tkinter import messagebox
 from hashlib import md5
 import app_globals
-from config import Config
+from config import Config, STYLE_TAG
 import basic2tape
 
 class Notebook(ttk.Notebook):
@@ -40,10 +40,24 @@ class Notebook(ttk.Notebook):
                 pass
 
 class Tab(ttk.Frame):
-    def __init__(self, *args, FileDir):
+    def __init__(self, *args, editor, FileDir):
         ttk.Frame.__init__(self, *args)
+        self.editor = editor
         self.status_bar = None
         self.textbox = self.create_text_widget()
+
+        # configure syntax highlight
+        self.regexp = re.compile(r'\w+|"(?:[^"\\]|\\.)*"|\s*#')
+        self.tags = [
+                (STYLE_TAG.TOKEN, "#266ce6"),
+                (STYLE_TAG.NUMBER, "#d32f2f"),
+                (STYLE_TAG.STRING, "#f57c00"),
+                (STYLE_TAG.COMMENT, "#3aa925")
+            ]
+        for tag in self.tags:
+            self.textbox.tag_config(tag[0], foreground=tag[1])
+        self.textbox.tag_configure("sel", background="#D6E8F8")
+
         self.file_dir = None
         self.file_name = os.path.basename(FileDir)
         self.status = md5(self.textbox.get(1.0, 'end').encode('utf-8'))
@@ -62,6 +76,7 @@ class Tab(ttk.Frame):
         yscrollbar.pack(side='right', fill='y')
 
         # Create Text Editor Box
+        #textbox = tk.Text(self, relief='sunken', borderwidth=0, wrap='none', background='black', foreground='white', insertbackground='white')
         textbox = tk.Text(self, relief='sunken', borderwidth=0, wrap='none')
         textbox.configure(xscrollcommand=xscrollbar.set, yscrollcommand=yscrollbar.set, undo=True, autoseparators=True)
 
@@ -83,10 +98,14 @@ class Editor:
         self.frame = tk.Frame(self.master)
         self.frame.pack()
         self.master.iconphoto(False, app_globals.APP_ICON)
-
         self.filetypes = (("Normal text file", "*.txt *.bas"), ("all files", "*.*"))
         self.init_dir = os.path.join(os.path.expanduser('~'), 'Desktop')
         self.untitled_count = 1
+
+        self.vars = {}
+        name = 'app.editor.syntax_highligth'
+        self.vars[name] = tk.BooleanVar(value=Config.get(name, True), name=name)
+        self.vars[name].trace_add("write", callback=self.var_callback)
 
         # Create Notebook ( for tabs )
         self.nb = Notebook(self.master)
@@ -124,6 +143,9 @@ class Editor:
         format_menu = tk.Menu(menubar, tearoff=0)
         self.word_wrap = tk.BooleanVar()
         format_menu.add_checkbutton(label="Word Wrap", onvalue=True, offvalue=False, variable=self.word_wrap, command=self.wrap)
+        format_menu.add_separator()
+        format_menu.add_checkbutton(label="Syntax highlight", onvalue=True, offvalue=False, variable=self.vars['app.editor.syntax_highligth'],
+                                     command=self.set_syntax_highlight)
 
         # zmakebas Menu
         zmake_menu = tk.Menu(menubar, tearoff=0)
@@ -138,8 +160,8 @@ class Editor:
         menubar.add_cascade(label="File", menu=file_menu)
         menubar.add_cascade(label="Edit", menu=edit_menu)
         menubar.add_cascade(label="Format", menu=format_menu)
-        menubar.add_cascade(label="zmakebas", menu=zmake_menu)
-        menubar.add_cascade(label="zxbasic", menu=zxbasic_menu)
+        menubar.add_cascade(label="ZMakebas", menu=zmake_menu)
+        menubar.add_cascade(label="ZXBASIC", menu=zxbasic_menu)
 
         self.master.configure(menu=menubar)
 
@@ -172,14 +194,31 @@ class Editor:
 
         self.master.bind('<Configure>', self.configure_callback)
 
-        # Create initial tab and 'Add' tab
+        # Create initial tab and ' + ' tab
         if file:
             self.open_file(file_dir=file)
         elif text:
             self.open_text(text)
         else:
-            self.nb.add(Tab(self.master, FileDir='Untitled'), text='Untitled')
-        self.nb.add(Tab(self.master, FileDir='f'), text=' + ')
+            self.nb.add(Tab(self.master, editor=self, FileDir='Untitled'), text='Untitled')
+        self.set_syntax_highlight()
+        self.nb.add(Tab(self.master, editor=self, FileDir='f'), text=' + ')
+
+    def var_callback(self, var, index, mode):
+        if mode == "write":
+            (Config.set(var, self.vars[var].get()))
+
+    def set_syntax_highlight(self):
+        curr_tab = self.nb.current_tab()
+        textbox = curr_tab.textbox
+        # set syntax highlight for all document
+        syntax_highlight = self.vars['app.editor.syntax_highligth'].get()
+        self.syntax_highlight_all(syntax_highlight)
+        # bind/unbind each key Release to the syntax_higlight function
+        if syntax_highlight:
+            textbox.bind("<KeyRelease>", lambda event: self.syntax_highlight())
+        else:
+            textbox.unbind("<KeyRelease>")
 
     def update_status_bar(self, event=None):
         # schedule an update after the key press is handled
@@ -207,7 +246,7 @@ class Editor:
                 file = open(file_dir)
 
                 # Create a new tab and insert at end.
-                new_tab = Tab(self.master, FileDir=file_dir)
+                new_tab = Tab(self.master, editor=self, FileDir=file_dir)
                 tab_index = self.nb.index('end')
                 if tab_index > 1:
                     self.nb.insert( tab_index-1, new_tab, text=os.path.basename(file_dir))
@@ -226,7 +265,7 @@ class Editor:
 
     def open_text(self, text):
         # Create a new tab and insert at end.
-        new_tab = Tab(self.master, FileDir='info')
+        new_tab = Tab(self.master, editor=self, FileDir='info')
         tab_index = self.nb.index('end')
         if tab_index > 1:
             self.nb.insert( tab_index-1, new_tab, text='info')
@@ -284,7 +323,7 @@ class Editor:
 
     def new_file(self, *args):
         # Create new tab
-        new_tab = Tab(self.master, FileDir=self.default_filename())
+        new_tab = Tab(self.master, editor=self, FileDir=self.default_filename())
         new_tab.textbox.configure(wrap= 'word' if self.word_wrap.get() else 'none')
         self.nb.insert( self.nb.index('end')-1, new_tab, text=new_tab.file_name)
         self.nb.select( new_tab )
@@ -422,6 +461,7 @@ class Editor:
         # If last tab was selected, create new tab
         if self.nb.select() == self.nb.tabs()[-1]:
             self.new_file()
+        self.set_syntax_highlight()
 
     def run_zmakebas(self):
         curr_tab = self.nb.current_tab()
@@ -466,6 +506,61 @@ class Editor:
         self.open_file(temp_asm_file)
         os.remove(temp_bas_file)
         os.remove(temp_asm_file)
+
+    def syntax_highlight(self, start_index="insert linestart", end_index="insert lineend"):
+        curr_tab = self.nb.current_tab()
+        textbox = curr_tab.textbox
+        # remove all tag instances
+        for tag in curr_tab.tags:
+            textbox.tag_remove(tag[0], start_index, end_index)
+        # loop through each match and add the corresponding tag
+        regexp = curr_tab.regexp
+        text = textbox.get(start_index, end_index)
+        for match in regexp.finditer(text):
+            start, end = match.span()
+            style_tag = self.get_style_tag(match.group())
+            if style_tag:
+                if style_tag == STYLE_TAG.COMMENT:
+                    textbox.tag_add(style_tag, f"{start_index}+{start}c", end_index)
+                    break
+                else:
+                    textbox.tag_add(style_tag, f"{start_index}+{start}c", f"{start_index}+{end}c")
+        
+        textbox.edit_modified(True)
+
+    def get_style_tag(self, token):
+        if not token:
+            return None
+        token = token.upper()
+        if token == "REM" or token.startswith('#'):
+            return STYLE_TAG.COMMENT
+        elif token in basic2tape.TOKENS:
+            return STYLE_TAG.TOKEN
+        elif self.is_number(token):
+            return STYLE_TAG.NUMBER
+        elif token.startswith('"'):
+            return STYLE_TAG.STRING
+        return None
+
+    def is_number(self, s):
+        try:
+            float(s)
+            return True
+        except ValueError:
+            return False
+
+    def syntax_highlight_all(self, on_off):
+        curr_tab = self.nb.current_tab()
+        textbox = curr_tab.textbox
+        numlines = int(textbox.index('end - 1 line').split('.')[0])
+        for i in range(1, numlines+1):
+            start_index=f'{i}.0'
+            end_index=f'{i+1}.0'
+            if on_off:
+                self.syntax_highlight(start_index=start_index, end_index=end_index)
+            else:
+                for tag in curr_tab.tags:
+                    textbox.tag_remove(tag[0], start_index, end_index)
 
 def main():
     root = tk.Tk()

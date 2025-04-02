@@ -13,6 +13,12 @@ class MACHINE(Enum):
     PAUSED = 2
     RESUMED = 3
 
+class STYLE_TAG(Enum):
+    TOKEN = "TOKEN"
+    NUMBER = "NUMBER"
+    STRING = "STRING"
+    COMMENT = "COMMENT"
+
 class Config(object):
 
     config = {}
