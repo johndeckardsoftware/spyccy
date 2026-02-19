@@ -12,14 +12,16 @@ from tzxtools import tzxls, tzxcat
 import basic2tape
 import joystick
 from ay_tuning import AYTuning
+import traceback
 
 try:
-    from zxbasic.src.zxbc import version
+    from src.zxbc import version
     zx_basic_compiler = True
     print(f"ZXBASIC version {version.VERSION}" )
-except:
+except Exception as e:
     zx_basic_compiler = False
-    print ("ZXBASIC not detected")
+    print(traceback.format_exc())
+    print(f"ZXBASIC not detected ({e})")
 
 class StatusBar(tk.Frame):
     def __init__(self, master, color):
@@ -608,7 +610,7 @@ class MainWindow():
 
     def constrain_50_fps(self):
         if self.emulator.machine:
-            self.emulator.machine.constrain_50_fps = self.vars['machine.constrain']
+            self.emulator.machine.constrain_50_fps = self.vars['machine.constrain'].get()
 
     def ay_tuning(self):
         if self.emulator.machine and self.emulator.machine.AY:

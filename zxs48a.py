@@ -37,7 +37,7 @@ class ZXSpectrum48a:
         self.SYS_ROM0_WRITE_PAGE = 4
         self.beeper_process_frame = 5
         self.ay_process_frame = 1
-        self.constrain_50_fps = 1
+        self.constrain_50_fps = Config.get('machine.constrain', 0)
 
         # tape
         self.tapedeck = TapeManager(self)
@@ -133,7 +133,7 @@ class ZXSpectrum48a:
         if Config.get('joystick.enabled', 0):
             pygame.display.init()   # events works only with display module initialized
             pygame.event.set_blocked((QUIT, KEYDOWN, KEYUP, MOUSEMOTION, MOUSEWHEEL, MOUSEBUTTONUP, MOUSEBUTTONDOWN))
-            self.joystick = JoysticksController(Config.get('joystick.type', joystick.SINCLAIR))                
+            self.joystick = JoysticksController(Config.get('joystick.type', joystick.SINCLAIR))
             print(self.joystick.info(full=1))
             if self.joystick.joycount == 0:
                 self.joystick = None
@@ -221,7 +221,7 @@ class ZXSpectrum48a:
             fc = app_globals.frames_count
             if fc % 2 == 0:
                 time_ms_start = time.monotonic()
-                self.video.show_frame3()
+                self.video.show_frame()
                 time_ms_end = time.monotonic()
                 app_globals.video_fps = (app_globals.video_fps + (time_ms_end - time_ms_start)) / 2
 
@@ -237,14 +237,14 @@ class ZXSpectrum48a:
                 pygame.event.pump()
 
             if self.constrain_50_fps and app_globals.frame_fps < 0.02:
-                await asyncio.sleep(0.02 - app_globals.frame_fps)
+                await asyncio.sleep(0.028 - app_globals.frame_fps)
 
             app_globals.frame_fps = (app_globals.frame_fps + (time.monotonic() - frame_ms_start)) / 2
             if fc % 250 == 0:
-                self.window.status_bar.set_cpu_fps(str(round(app_globals.cpu_fps, 2)))
-                self.window.status_bar.set_video_fps(str(round(app_globals.video_fps, 3)))
+                self.window.status_bar.set_cpu_fps(str(round(app_globals.cpu_fps, 3)))
+                self.window.status_bar.set_video_fps(str(round(app_globals.video_fps, 4)))
                 #self.window.status_bar.set_tk_fps(str(round(app_globals.tk_fps, 3)))
-                self.window.status_bar.set_fps(str(round(1 / (app_globals.frame_fps), 2)))
+                self.window.status_bar.set_fps(str(int(1 / (app_globals.frame_fps))))
                 if self.tapedeck.is_playing:
                     self.window.status_bar.set_tape(self.tapedeck.name + app_globals.TAPE_PLAYING[self.tapedeck.count])
                     self.tapedeck.count += 1

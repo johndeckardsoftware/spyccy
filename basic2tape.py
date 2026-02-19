@@ -724,7 +724,7 @@ from io import StringIO
 import sys
 
 try:
-    from zxbasic.src.zxbc import zxbc
+    from src.zxbc import zxbc
     zxbc.OPTIONS._options['max_syntax_errors'] = 9999 # to avoid sys.exit(1) with more than 20 errors
     zx_basic_compiler = True
 except:

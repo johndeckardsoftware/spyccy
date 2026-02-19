@@ -25,10 +25,12 @@ All the code is written in Python.
 
 required libraries:
 
-* tkinter
-* pygame
-* numpy
-* pillow
+* tkinter   ("pip install" tk or "apt-get install python3-tk")
+* pygame    ("pip install pygame" or "apt-get install python3-pygame")
+* cffi      ("pip install cffi" or "apt-get install python3-cffi")
+* numpy     ("pip install numpy")
+* pillow    ("pip install pilllow" or "apt-get install python3-pil python3-pil.imagetk")
+* zxbasic   [optional] ("pip install zxbasic")
 
 ## Run
 
