@@ -1,10 +1,10 @@
 # SPYCCY
 
-Just another ZXSpectrum emulator completely written in Python.
+Just another ZX Spectrum emulator completely written in Python.
 
 ## Features
 
-* Emulates the Spectrum 48K and 128K machines
+* Emulates the ZXSpectrum 48K and 128K machines
 * Handles all Z80 instructions, documented and undocumented
 * Beeper and AY-8912 chip audio
 * Loads SZX, Z80 and SNA snapshots
@@ -21,16 +21,16 @@ Just another ZXSpectrum emulator completely written in Python.
 
 ## Requirements
 
-All the code is written in Python.
+All the code is written in Python. Optional c library are included to boost screen render. 
 
 required libraries:
 
-* tkinter   ("pip install" tk or "apt-get install python3-tk")
+* tkinter   ("pip install tk" or "apt-get install python3-tk")
 * pygame    ("pip install pygame" or "apt-get install python3-pygame")
-* cffi      ("pip install cffi" or "apt-get install python3-cffi")
 * numpy     ("pip install numpy")
 * pillow    ("pip install pilllow" or "apt-get install python3-pil python3-pil.imagetk")
-* zxbasic   [optional] ("pip install zxbasic")
+* cffi      [optional to boost screen rendering] ("pip install cffi" or "apt-get install python3-cffi")
+* zxbasic   [optional to generate assembler code from basic sources] ("pip install zxbasic")
 
 ## Run
 

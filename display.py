@@ -1,10 +1,15 @@
-import time, platform
-from cffi import FFI
+import platform, time
 import tkinter as tk
 from PIL import Image, ImagePalette
 from PIL import ImageTk as itk
 from config import *
 import app_globals
+
+try:
+    from cffi import FFI
+    cffi_available = True
+except:
+    cffi_available = False
 
 # Screen specifications: 
 # 32 x 24 chars     256 x 192 pixels    border:
@@ -72,19 +77,22 @@ class TkScreenRenderer:
                 0xff, 0xff, 0xff,
             ])
         # check library to boost pixels handling
-        _os_ = platform.system().lower()
-        arch = platform.machine().lower()
-        libname = os.path.join(os.path.dirname(__file__), f"displayc_{_os_}_{arch}.lib")
-        if os.path.exists(libname):
-            self.use_c_code = True
-            self.ffi = FFI()
-            self.displayc = self.ffi.dlopen(libname)
-            self.ffi.cdef("int set_frame_p8(char *, char *, int, int, int);")
-            self.ffi.cdef("int set_frame_rgb(char *, char *, int, int, int);")
-            self.ffi.cdef("int set_resize_frame_rgb(char *, char *, int, int, int, int);")
+        if cffi_available:
+            _os_ = platform.system().lower()
+            arch = platform.machine().lower()
+            libname = os.path.join(os.path.dirname(__file__), f"displayc_{_os_}_{arch}.lib")
+            if os.path.exists(libname):
+                self.use_c_code = True
+                self.ffi = FFI()
+                self.displayc = self.ffi.dlopen(libname)
+                self.ffi.cdef("int set_frame_p8(char *, char *, int, int, int);")
+                self.ffi.cdef("int set_frame_rgb(char *, char *, int, int, int);")
+                self.ffi.cdef("int set_resize_frame_rgb(char *, char *, int, int, int, int);")
+            else:
+                self.use_c_code = False
+                print(f"'{libname}' not found, screen optimizations disabled")
         else:
             self.use_c_code = False
-            print(f"'{libname}' not found, screen optimizations disabled")
 
     def set_zoom(self, zoom):
         self.zoom = zoom
