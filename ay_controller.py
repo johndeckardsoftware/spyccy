@@ -73,7 +73,7 @@ class AYController():
         self.stereo_low_volume = 0.5
         self.mono_volume = 0.8
         self.cpu_frame_count = 1
-        self.play_frame = Config.get('ay.interval', 2)
+        self.play_frame = Config.get('ay.py.interval', 1)
 
         # pygame.mixer
         self.mixer = None
@@ -89,12 +89,12 @@ class AYController():
         self.channels[1] = AYChannel(1, "B", self, self.mixer)
         self.channels[2] = AYChannel(2, "C", self, self.mixer)
 
-        self.channelA = self.channels[Config.get('ay.a.ord', 0)]
-        self.channelA.muted = Config.get('ay.a.muted', 0)
-        self.channelB = self.channels[Config.get('ay.b.ord', 1)]
-        self.channelB.muted = Config.get('ay.b.muted', 0)
-        self.channelC = self.channels[Config.get('ay.c.ord', 2)]
-        self.channelC.muted = Config.get('ay.c.muted', 0)
+        self.channelA = self.channels[Config.get('ay.py.a.ord', 0)]
+        self.channelA.muted = Config.get('ay.py.a.muted', 0)
+        self.channelB = self.channels[Config.get('ay.py.b.ord', 1)]
+        self.channelB.muted = Config.get('ay.py.b.muted', 0)
+        self.channelC = self.channels[Config.get('ay.py.c.ord', 2)]
+        self.channelC.muted = Config.get('ay.py.c.muted', 0)
 
         #self.channelA = AYChannel(0, "A", self, self.mixer)
         #self.channelA.muted = 0
@@ -245,9 +245,16 @@ class AYController():
     def run_frame_end(self):
         play = 1 if self.cpu_frame_count == self.play_frame else 0
         if not self.muted:
-            self.channelA.play_wave(play)
-            self.channelB.play_wave(play)
-            self.channelC.play_wave(play)
+            s0 = self.channelA.play_wave(play)
+            s1 = self.channelB.play_wave(play)
+            s2 = self.channelC.play_wave(play)
+            if s0:
+                self.mixer.Channel(0).queue(s0)
+            if s1:
+                self.mixer.Channel(1).queue(s1)
+            if s2:
+                self.mixer.Channel(2).queue(s2)
+
         self.cpu_frame_count = 1 if self.cpu_frame_count >= self.play_frame else self.cpu_frame_count + 1
 
     def log(self, text):

@@ -148,31 +148,31 @@ class AYTuning():
         Config.set('app.aytuning.geometry', self.window.geometry())
 
     def get_ord(self):
-        abc = self.chaname[Config.get('ay.a.ord', 0)] + self.chaname[Config.get('ay.b.ord', 1)] + self.chaname[Config.get('ay.c.ord', 2)]
+        abc = self.chaname[Config.get('ay.py.a.ord', 0)] + self.chaname[Config.get('ay.py.b.ord', 1)] + self.chaname[Config.get('ay.py.c.ord', 2)]
         return abc.upper()
 
     def update_abc_ord(self, event):
         abc = self.cb_abc_ord.get()
         i = 0
         for x in abc:
-            key = f"ay.{x}.ord".lower()
+            key = f"ay.py.{x}.ord".lower()
             Config.set(key, i)
             i += 1
         abc = [' ', ' ', ' ']
-        i = Config.get('ay.a.ord', 0)
+        i = Config.get('ay.py.a.ord', 0)
         abc[i] = 'A'
-        i = Config.get('ay.b.ord', 1)
+        i = Config.get('ay.py.b.ord', 1)
         abc[i] = 'B'
-        i = Config.get('ay.c.ord', 2)
+        i = Config.get('ay.py.c.ord', 2)
         abc[i] = 'C'
 
     def update_lvolume(self, val):
         self.channels[self.channel].left_volume = self.scale_lvolume.get()
-        Config.set(f'ay.{self.chaname[self.channel]}.lvolume', self.scale_lvolume.get())
+        Config.set(f'ay.py.{self.chaname[self.channel]}.lvolume', self.scale_lvolume.get())
 
     def update_rvolume(self, val):
         self.channels[self.channel].right_volume = self.scale_rvolume.get()
-        Config.set(f'ay.{self.chaname[self.channel]}.rvolume', self.scale_rvolume.get())
+        Config.set(f'ay.py.{self.chaname[self.channel]}.rvolume', self.scale_rvolume.get())
 
     def update_ay_freq(self, val):
         #self.controller.AY_clock_frequency = self.AY_clock_frequency + (self.scale_freq.get() * 10000)
@@ -190,18 +190,19 @@ class AYTuning():
     def mute_a(self):
         print(self.var_a_mute.get())
         self.channels[0].mute(self.var_a_mute.get())
-        Config.set(f'ay.a.muted', self.var_a_mute.get())
+        Config.set(f'ay.py.a.muted', self.var_a_mute.get())
 
     def mute_b(self):
         self.channels[1].mute(self.var_b_mute.get())
-        Config.set(f'ay.b.muted', self.var_b_mute.get())
+        Config.set(f'ay.py.b.muted', self.var_b_mute.get())
 
     def mute_c(self):
         self.channels[2].mute(self.var_c_mute.get())
-        Config.set(f'ay.c.muted', self.var_c_mute.get())
+        Config.set(f'ay.py.c.muted', self.var_c_mute.get())
 
 def mygrid(self, column, row, padx=(2,2), pady=(2,2), sticky="w", **kw):
     self.grid(row=row, column=column, padx=padx, pady=pady, sticky=sticky, **kw)
+
 setattr(tk.Widget, 'mygrid', mygrid)
 
 def main():

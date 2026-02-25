@@ -28,15 +28,12 @@ class Config(object):
             config = json.load(f)
 
     machine = {} # selected machine configuration
+    active = None
     _vars = {}
 
     @staticmethod
-    def set_machine(type='current', vars=None) -> str:
-        if vars:
-            Config.save(vars)
-            Config._vars = vars
-
-        active = ''
+    def load_machine(type='current') -> str:
+        active = ""
         if 'active' in Config.config:
             active = Config.config['active']
         else:
@@ -51,70 +48,98 @@ class Config(object):
             }
 
         if type == 'current':
-            Config.machine = Config.config[active]
+            pass
         elif type in Config.config:
             active = type
-            Config.machine = Config.config[active]
-            Config.config['active'] = active
         else:
             active = type
-            Config.config['active'] = active
             Config.config[active] = {
                 "machine": {
                     "type": active
                 }
             }
-            Config.machine = Config.config[active]
 
-        # set vars for ui
-        if vars:
-            vars['machine.type'].set(Config.get('machine.type', '48a'))
-            if active == '48a' or active == '48b':
-                vars['machine.rom0'].set(Config.get('machine.rom0', './support/roms/48.rom'))
-                vars['machine.rom1'].set('--')
-            else:
-                vars['machine.rom0'].set(Config.get('machine.rom0', './support/roms/128-0.rom'))  
-                vars['machine.rom1'].set(Config.get('machine.rom1', './support/roms/128-1.rom'))  
-
-            vars['machine.auto_start'].set(Config.get('machine.auto_start', 1))
-            if Config.get('machine.auto_start', 0):
-                vars['machine.status'].set('start')
-
-            vars['machine.constrain'].set(Config.get('machine.constrain', 1))
-            vars['machine.background'].set(Config.get('machine.background', 0))
-            vars['tape.enabled'].set(Config.get('tape.enabled', True))
-            vars['tape.auto_load'].set(Config.get('tape.auto_load', True))
-            vars['tape.block'].set(Config.get('tape.block', -1))
-            vars['tape.converter'].set(Config.get('tape.converter', 'basic'))
-            vars['display.zoom'].set(Config.get('display.zoom', '2'))
-            vars['display.renderer'].set(Config.get('display.renderer', 'tk'))
-            vars['keyboard.type'].set(Config.get('keyboard.type', 'standard'))
-            vars['joystick.enabled'].set(Config.get('joystick.enabled', 0))
-            vars['joystick.type'].set(Config.get('joystick.type', 1))
-            vars['joystick.left'].set(Config.get('joystick.left', 'Q'))
-            vars['joystick.right'].set(Config.get('joystick.right', 'A'))
-            vars['joystick.up'].set(Config.get('joystick.up', 'O'))
-            vars['joystick.down'].set(Config.get('joystick.down', 'P'))
-            vars['joystick.fire'].set(Config.get('joystick.fire', 'BREAK_SPACE'))
-            vars['beeper.muted'].set(Config.get('beeper.muted', 0))
-            vars['beeper.stereo'].set(Config.get('beeper.stereo', 1))
-            vars['ay.muted'].set(Config.get('ay.muted', 0))
-            vars['ay.a.muted'].set(Config.get('ay.a.muted', 0))
-            vars['ay.b.muted'].set(Config.get('ay.b.muted', 0))
-            vars['ay.c.muted'].set(Config.get('ay.c.muted', 0))
-            vars['ay.stereo'].set(Config.get('ay.stereo', 1))
-            vars['usource.enabled'].set(Config.get('usource.enabled', 0))
-            vars['usource.rom'].set(Config.get('usource.rom', './support/roms/usource.rom'))
-            vars['betadisk.enabled'].set(Config.get('betadisk.enabled', 0))
-            vars['betadisk.rom'].set(Config.get('betadisk.rom', './support/roms/trdos.rom'))
-            vars['cartridge.enabled'].set(Config.get('cartridge.enabled', 0))
-
+        Config.config['active'] = active
+        Config.active = active
+        Config.machine = Config.config[active]
         return active
 
     @staticmethod
-    def get(key: str, _default: any) -> any:
+    def load_machine_vars(vars):
+        Config._vars = vars
+        vars['machine.type'].set(Config.get('machine.type', '48a'))
+        if Config.active == '48a' or Config.active == '48b':
+            vars['machine.rom0'].set(Config.get('machine.rom0', './support/roms/48.rom'))
+            vars['machine.rom1'].set('--')
+        else:
+            vars['machine.rom0'].set(Config.get('machine.rom0', './support/roms/128-0.rom'))  
+            vars['machine.rom1'].set(Config.get('machine.rom1', './support/roms/128-1.rom'))  
+
+        vars['machine.auto_start'].set(Config.get('machine.auto_start', 1))
+        if Config.get('machine.auto_start', 0):
+            vars['machine.status'].set('start')
+
+        vars['machine.constrain'].set(Config.get('machine.constrain', 1))
+        vars['machine.background'].set(Config.get('machine.background', 0))
+        vars['tape.enabled'].set(Config.get('tape.enabled', True))
+        vars['tape.auto_load'].set(Config.get('tape.auto_load', True))
+        vars['tape.block'].set(Config.get('tape.block', -1))
+        vars['tape.converter'].set(Config.get('tape.converter', 'basic'))
+        vars['display.zoom'].set(Config.get('display.zoom', '2'))
+        vars['display.renderer'].set(Config.get('display.renderer', 'tk'))
+        vars['keyboard.type'].set(Config.get('keyboard.type', 'standard'))
+        vars['joystick.enabled'].set(Config.get('joystick.enabled', 0))
+        vars['joystick.type'].set(Config.get('joystick.type', 1))
+        vars['joystick.left'].set(Config.get('joystick.left', 'Q'))
+        vars['joystick.right'].set(Config.get('joystick.right', 'A'))
+        vars['joystick.up'].set(Config.get('joystick.up', 'O'))
+        vars['joystick.down'].set(Config.get('joystick.down', 'P'))
+        vars['joystick.fire'].set(Config.get('joystick.fire', 'BREAK_SPACE'))
+        vars['beeper.muted'].set(Config.get('beeper.muted', 0))
+        vars['beeper.stereo'].set(Config.get('beeper.stereo', 1))
+        vars['ay.emu'].set(Config.get('ay.emu', 'py'))
+        vars['ay.py.muted'].set(Config.get('ay.py.muted', 0))
+        vars['ay.py.a.muted'].set(Config.get('ay.py.a.muted', 0))
+        vars['ay.py.b.muted'].set(Config.get('ay.py.b.muted', 0))
+        vars['ay.py.c.muted'].set(Config.get('ay.py.c.muted', 0))
+        vars['ay.py.stereo'].set(Config.get('ay.py.stereo', 1))
+        vars['ay.c.muted'].set(Config.get('ay.c.muted', 0))
+        vars['ay.c.a.muted'].set(Config.get('ay.c.a.muted', 0))
+        vars['ay.c.b.muted'].set(Config.get('ay.c.b.muted', 0))
+        vars['ay.c.c.muted'].set(Config.get('ay.c.c.muted', 0))
+        vars['ay.c.stereo'].set(Config.get('ay.c.stereo', 1))
+        vars['usource.enabled'].set(Config.get('usource.enabled', 0))
+        vars['usource.rom'].set(Config.get('usource.rom', './support/roms/usource.rom'))
+        vars['betadisk.enabled'].set(Config.get('betadisk.enabled', 0))
+        vars['betadisk.rom'].set(Config.get('betadisk.rom', './support/roms/trdos.rom'))
+        vars['cartridge.enabled'].set(Config.get('cartridge.enabled', 0))
+
+    @staticmethod
+    def load_machine_and_vars(type='current', vars=None):
+        Config.load_machine(type)
+        if vars:
+            Config.load_machine_vars(vars)
+
+    @staticmethod
+    def update(vars: dict):
+        for var in vars:
+            if var != 'machine.type':
+                Config.set(var, vars[var].get())
+
+    @staticmethod
+    def save():
+        with open(Config.config_file, "w", encoding="utf-8") as f:
+            json.dump(Config.config, f, indent=2)
+
+    @staticmethod
+    def save_machine_vars(vars: dict):
+        Config.update(vars)
+        Config.save()
+
+    @staticmethod
+    def get(key: str, _default: any, c: dict = None) -> any:
+        if not c: c = Config.machine
         s = key.split('.')
-        c = Config.machine
         r = True
         for k in s:
             if k in c:
@@ -128,9 +153,9 @@ class Config(object):
             return _default
 
     @staticmethod
-    def set(key: str, value: any) -> any:
+    def set(key: str, value: any, c: dict = None) -> any:
+        if not c: c = Config.machine
         s = key.split('.')
-        c = Config.machine
         r = True
         for k in s:
             if k in c:
@@ -146,18 +171,4 @@ class Config(object):
         if key in Config._vars:
             Config._vars[key].set(value)
 
-    @staticmethod
-    def update(vars: dict):
-        for var in vars:
-            if var != 'machine.type':
-                Config.set(var, vars[var].get())
-
-    @staticmethod
-    def save(vars: dict):
-        for var in vars:
-            if var != 'machine.type':
-                Config.set(var, vars[var].get())
-                #print(var, vars[var].get())
-
-        with open(Config.config_file, "w", encoding="utf-8") as f:
-            json.dump(Config.config, f, indent=2)
+Config.load_machine()

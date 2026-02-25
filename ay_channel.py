@@ -24,8 +24,8 @@ class AYChannel:
         # The AY clock frequency affects the tone and envelope frequencies.
         self.AY_clock_frequency = 1773400  # zx 1773400 MHz
         self.frame_t_state_count = controller.frame_t_state_count
-        self.actual_fps = Config.get('ay.fps', 56)
-        self.frequency_adjuster = Config.get('ay.freq_adj', 8)
+        self.actual_fps = Config.get('ay.py.fps', 50)
+        self.frequency_adjuster = Config.get('ay.py.freq_adj', 8)
 
         # General AY signal parameters.
         self.tone_period_low_byte = 0
@@ -50,8 +50,8 @@ class AYChannel:
         self.phase_angle_increment_noise = 0
         self.tone_signal_on = False
         self.noise_signal_on = False
-        self.left_volume = Config.get(f'ay.{name.lower()}.lvolume', 0)
-        self.right_volume = Config.get(f'ay.{name.lower()}.rvolume', 0)
+        self.left_volume = Config.get(f'ay.py.{name.lower()}.lvolume', 0)
+        self.right_volume = Config.get(f'ay.py.{name.lower()}.rvolume', 0)
 
         # Envelope variables
         self.envelope_period_low_byte = 0
@@ -79,7 +79,12 @@ class AYChannel:
         # out wave buffer
         self.wave = array('h', [0] * (self.wave_sample_rate * (self.streams)))  # max 1 sec buffer
         self.wave_data_index = 0
-        self.wave_data_length = int(self.wave_sample_rate / self.actual_fps) * self.controller.play_frame * (self.streams) 
+        # wave_data_size = freq * chans * (bits / 8) / player_freq
+        # freq=self.wave_sample_rate
+        # chans=self.streams
+        # (bits/8)='h'
+        # player_freq=50Hz   
+        self.wave_data_length = int(self.wave_sample_rate * self.controller.play_frame * self.streams / self.actual_fps) 
 
         # initalize player
         self.mixer = self.mixer
@@ -484,17 +489,19 @@ class AYChannel:
         return self.seed & 1
 
     def play_wave(self, play):
+        sound = None
         if not self.muted:
             if self.wave_data_index > 0 and play:
                 fill_samples = self.wave_data_length - self.wave_data_index
                 if fill_samples > 0:
                     self.generate_wave(fill_samples)
                     sound = self.mixer.Sound(self.wave[0:self.wave_data_index])
-                    self.mixer_channel.queue(sound)
+                    #self.mixer_channel.queue(sound)
                     self.wave_data_index = 0
-
+        
         self.last_write_t = 0
-
+        return sound
+    
     def log(self, text):
         if self.log_enabled:
             s = f"{text}\n"
