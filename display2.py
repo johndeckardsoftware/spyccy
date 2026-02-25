@@ -7,11 +7,8 @@ import tkinter as tk
 from config import *
 import app_globals
 
-try:
+if app_globals.lib_displayc:
     from cffi import FFI
-    cffi_available = True
-except:
-    cffi_available = False
 
 class SDLScreenRenderer:
     def __init__(self, window, mmu):
@@ -48,23 +45,19 @@ class SDLScreenRenderer:
             (0xff, 0xff, 0x00),
             (0xff, 0xff, 0xff),
         ]
+
         # check library to boost pixels handling
-        if cffi_available:
-            _os_ = platform.system().lower()
-            arch = platform.machine().lower()
-            libname = os.path.join(os.path.dirname(__file__), f"displayc_{_os_}_{arch}.lib")
-            if os.path.exists(libname):
-                self.use_c_code = True
-                self.ffi = FFI()
-                self.displayc = self.ffi.dlopen(libname)
-                self.ffi.cdef("int set_frame_p8(char *, char *, int, int, int);")
-            else:
-                self.use_c_code = False
-                print(f"'{libname}' not found, screen optimizations disabled")
+        if app_globals.lib_displayc:
+            self.use_c_code = True
+            self.ffi = FFI()
+            self.displayc = self.ffi.dlopen(app_globals.lib_displayc)
+            self.ffi.cdef("int set_frame_p8(char *, char *, int, int, int);")
+            self.ffi.cdef("int set_frame_rgb(char *, char *, int, int, int);")
+            self.ffi.cdef("int set_resize_frame_rgb(char *, char *, int, int, int, int);")
         else:
             self.use_c_code = False
 
-        # trick to embed pygame screen into tkinter canvas 
+        # trick to embed pygame screen into tkinter canvas
         os.environ['SDL_WINDOWID'] = str(self.canvas.winfo_id())
         os.environ['SDL_VIDEODRIVER'] = 'windib'
         self.init_display = True

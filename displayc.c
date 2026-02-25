@@ -1,20 +1,20 @@
-/* 
+/*
 Linux
-(arm):  gcc -o displayc_linux_aarch64.lib displayc.c -Wall -Wextra -Wredundant-decls -shared
-(x64):  gcc -o displayc_linux_x86_64.lib displayc.c -Wall -Wextra -Wredundant-decls -shared
+(arm):  gcc -o displayc_linux_aarch64.lib displayc.c -O3 -Wall -Wextra -Wredundant-decls -shared
+(x64):  gcc -o displayc_linux_x86_64.lib displayc.c -O3 -Wall -Wextra -Wredundant-decls -shared
 
 Windows:
-        gcc -o displayc_windows_amd64.lib displayc.c -DWIN32 -Wall -Wextra -Wredundant-decls -shared
+        gcc -o displayc_windows_amd64.lib displayc.c -O3 -DWIN32 -Wall -Wextra -Wredundant-decls -shared
         https://github.com/skeeto/w64devkit/ for an easy to instal and run gcc compiler
 
 Others: gcc -o displayc_xxx_yyy.lib displayc.c -DWIN32 -Wall -Wextra -Wredundant-decls -shared
         where xxx is the system and yyy is the cpu architecture
         or check the error message to view the expected file name
-*/ 
+*/
 
 #include "displayc.h"
 
-// set screen pixels bitmap using the palette color index 
+// set screen pixels bitmap using the palette color index
 int set_frame_p8(char * bitmap, char * vram, int screen_addr, int attrib_addr, int flash_phase)
 {
     int row = 0, col = 0;

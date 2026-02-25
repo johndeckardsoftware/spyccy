@@ -1,24 +1,20 @@
-import platform, time
 import tkinter as tk
 from PIL import Image, ImagePalette
 from PIL import ImageTk as itk
 from config import *
 import app_globals
 
-try:
+if app_globals.lib_displayc:
     from cffi import FFI
-    cffi_available = True
-except:
-    cffi_available = False
 
-# Screen specifications: 
+# Screen specifications:
 # 32 x 24 chars     256 x 192 pixels    border:
 # absolute pointers:
 # screen: 0x4000 - 0x47ff first 8 rows, 0x4800 - 0x4fff second 8 rows, 0x5000 0x57ff last 8 rows
-# attrib: 0x5800 - 0x5aff  
+# attrib: 0x5800 - 0x5aff
 # relative pointers:
 # screen: 0x0000 - 0x07ff first 8 rows, 0x0800 - 0x0fff second 8 rows, 0x1000 0x17ff last 8 rows
-# attrib: 0x1800 - 0x1aff  
+# attrib: 0x1800 - 0x1aff
 
 class TkScreenRenderer:
     def __init__(self, window, mmu):
@@ -76,21 +72,15 @@ class TkScreenRenderer:
                 0xff, 0xff, 0x00,
                 0xff, 0xff, 0xff,
             ])
+
         # check library to boost pixels handling
-        if cffi_available:
-            _os_ = platform.system().lower()
-            arch = platform.machine().lower()
-            libname = os.path.join(os.path.dirname(__file__), f"displayc_{_os_}_{arch}.lib")
-            if os.path.exists(libname):
-                self.use_c_code = True
-                self.ffi = FFI()
-                self.displayc = self.ffi.dlopen(libname)
-                self.ffi.cdef("int set_frame_p8(char *, char *, int, int, int);")
-                self.ffi.cdef("int set_frame_rgb(char *, char *, int, int, int);")
-                self.ffi.cdef("int set_resize_frame_rgb(char *, char *, int, int, int, int);")
-            else:
-                self.use_c_code = False
-                print(f"'{libname}' not found, screen optimizations disabled")
+        if app_globals.lib_displayc:
+            self.use_c_code = True
+            self.ffi = FFI()
+            self.displayc = self.ffi.dlopen(app_globals.lib_displayc)
+            self.ffi.cdef("int set_frame_p8(char *, char *, int, int, int);")
+            self.ffi.cdef("int set_frame_rgb(char *, char *, int, int, int);")
+            self.ffi.cdef("int set_resize_frame_rgb(char *, char *, int, int, int, int);")
         else:
             self.use_c_code = False
 
@@ -102,7 +92,7 @@ class TkScreenRenderer:
 
     #
     # screen bitmap created using color palette index as pixel (tkinter 'P' mode)
-    # resize to actual screen size done with tkinter   
+    # resize to actual screen size done with tkinter
     #
     def show_frame(self):
         bitmap = self.screen_pixels_p
@@ -163,10 +153,10 @@ class TkScreenRenderer:
         if prev_image_id: self.canvas.delete(prev_image_id)
 
         self.flash_phase = (self.flash_phase + 1) & 0x1f
-    
+
     #
     # screen bitmap with RGB format (tkinter 'RGB' mode)
-    # resize to actual screen size done at the same of bitmap generation   
+    # resize to actual screen size done at the same of bitmap generation
     #
     def show_frame_rgb_resize(self):
 
@@ -232,7 +222,7 @@ class TkScreenRenderer:
                                     ptr += 3
                                 char_pixels <<= 1
 
-                            char_bitmap_ptr += col_size * zoom 
+                            char_bitmap_ptr += col_size * zoom
 
                         char_attrib_ptr += 1
                         char_first_byte += 1
@@ -246,10 +236,10 @@ class TkScreenRenderer:
         if prev_image_id: self.canvas.delete(prev_image_id)
 
         self.flash_phase = (self.flash_phase + 1) & 0x1f
-    
+
     #
     # screen bitmap with RGB format (tkinter 'RGB' mode)
-    # resize to actual screen size done by tkinter   
+    # resize to actual screen size done by tkinter
     #
     def show_frame_rgb(self):
         bitmap = self.screen_pixels_rgb
