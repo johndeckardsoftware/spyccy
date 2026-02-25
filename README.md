@@ -6,10 +6,10 @@ Just another ZX Spectrum emulator completely written in Python.
 
 * Emulates the ZXSpectrum 48K and 128K machines
 * Handles all Z80 instructions, documented and undocumented
-* Beeper and AY-8912 chip audio
+* Beeper and AY-8910 chip audio
 * Loads SZX, Z80 and SNA snapshots
 * Save Z80 snapshots
-* Loads TZX and TAP tape images
+* Loads TAP tape files and partially TZX tape files
 * Save TAP tape images
 * Run BASIC programs edited from spyccy editor (manages zmakebas syntax) 
 * TR-DOS rom extension
@@ -18,10 +18,11 @@ Just another ZX Spectrum emulator completely written in Python.
 * Joystick (Sinclair, Kempston, Programmable, Cursor, Fuller)
 * Currah µSource rom extension
 * Sinclair Zx2 interface cartridge
+* Platforms: Linux and Windows
 
 ## Requirements
 
-All the code is written in Python. Optional c library are included to boost screen render. 
+All the code is written in Python. Optional c libraries are included to boost screen and AY-8910 handling. 
 
 required libraries:
 
@@ -74,3 +75,4 @@ This software is inspired, or derive code from the following open source project
 * PyZXSpectrum (https://github.com/folkertvanheusden/PyZXSpectrum)
 * tzxtools - a collection for processing tzx files (https://github.com/shred/tzxtools)
 * Russell Marks zmakebas.c (https://github.com/z00m128/zmakebas)
+* Alexander Sashnov (https://github.com/asashnov/libayemu)

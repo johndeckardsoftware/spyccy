@@ -1,0 +1,4 @@
+tk
+pygame
+numpy
+pillow
