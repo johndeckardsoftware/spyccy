@@ -14,6 +14,7 @@ from tape import TapeManager
 from snapshot import parseZ80File, parseSZXFile, parseSNAFile, create_snapshot
 from beeper import BeeperController
 from ay_controller import AYController
+from ay_emu_controller import AYController as AYControllerEmu
 from ports import InOutManager
 from beta_disk_controller import BetaDiskController as BetaDisk
 import joystick
@@ -98,8 +99,12 @@ class ZXSpectrum48a:
 
         # audio
         self.beeper = BeeperController(44100, Config.get('audio.stereo', 1), Config.get('audio.muted', 0), self.frame_cycle_count)
+
         #self.AY = None
-        self.AY = AYController(44100, Config.get('audio.stereo', 1), Config.get('audio.muted', 0), self.frame_cycle_count)
+        if app_globals.lib_ay_emu and Config.get('ay.emu', 'py') == 'c':
+            self.AY = AYControllerEmu(44100, Config.get('ay.c.stereo', 1), Config.get('ay.c.muted', 0), self.frame_cycle_count)
+        else:
+            self.AY = AYController(44100, Config.get('ay.py.stereo', 1), Config.get('ay.py.muted', 0), self.frame_cycle_count)
 
         # betadisk
         self.betadisk = BetaDisk(2)

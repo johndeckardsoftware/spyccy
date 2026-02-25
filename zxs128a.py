@@ -1,13 +1,15 @@
 #
 # ZXSpectrum 128
 #
+import app_globals
 from config import *
+from mmu import MemoryManager
 from display import TkScreenRenderer
 from display2 import SDLScreenRenderer
 from keyboard import OriginalKeyboardHandler, GamerKeyboardHandler, StandardKeyboardHandler
 from beeper import BeeperController
 from ay_controller import AYController
-from mmu import MemoryManager
+from ay_emu_controller import AYController as AYControllerEmu
 from ports import InOutManager
 from zxs48a import ZXSpectrum48a
 from beta_disk_controller import BetaDiskController as BetaDisk
@@ -77,7 +79,11 @@ class ZXSpectrum128a(ZXSpectrum48a):
 
         # audio
         self.beeper = BeeperController(44100, Config.get('audio.stereo', 1), Config.get('audio.muted', 0), self.frame_cycle_count)
-        self.AY = AYController(44100, Config.get('audio.stereo', 1), Config.get('audio.muted', 0), self.frame_cycle_count)
+
+        if app_globals.lib_ay_emu and Config.get('ay.emu', 'py') == 'c':
+            self.AY = AYControllerEmu(44100, Config.get('ay.c.stereo', 1), Config.get('ay.c.muted', 0), self.frame_cycle_count)
+        else:
+            self.AY = AYController(44100, Config.get('ay.py.stereo', 1), Config.get('ay.py.muted', 0), self.frame_cycle_count)
 
         # betadisk
         self.betadisk = BetaDisk(2)
@@ -95,7 +101,7 @@ class ZXSpectrum128a(ZXSpectrum48a):
             self.joystick = JoysticksController(Config.get('joystick.type', joystick.SINCLAIR))
             print(self.joystick.info(full=1))
             if self.joystick.joycount == 0:
-                self.joystick = None            
+                self.joystick = None
         else:
             self.joystick = None
 
