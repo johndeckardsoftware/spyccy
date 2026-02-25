@@ -1,0 +1,10 @@
+Roman Scherbakov <v_soft@nm.ru>
+  * the author of VTX format
+  * the author of original 'in_vtx' 3.0 plugin for Winamp
+  * the author of enhanced 'in_vtx' 4.0 plugin for Winamp
+    based on libayemu code and sound resampling library
+  * helped to debug C code of this library
+
+Sashnov Alexander <asashnov@rambler.ru>
+  * started to rewrite 'in_vtx' plugin for xmms on Linux
+  * started 'libayemu' project on sourceforge
