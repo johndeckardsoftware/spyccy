@@ -101,9 +101,15 @@ def set_af(val):
 def get_de():
   global d, e
   return pack(d, e)
+def set_de(val):
+  global d, e
+  d, e = unpack(val)
 def get_ix():
   global ix
   return ix
+def set_ix(val):
+  global ix
+  ix = val
 
 def set_registers(AF, BC, DE, HL, AF_, BC_, DE_, HL_, IX, IY, SP, IR):
   global a, f, b, c, d, e, h, l, i, r, ix, iy
