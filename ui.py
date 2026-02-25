@@ -7,17 +7,17 @@ import string
 import app_globals
 from config import *
 from editor import Editor
-from args import Args
 from tzxtools import tzxls, tzxcat
 import basic2tape
 import joystick
 from ay_tuning import AYTuning
+from ay_emu_tuning import AYTuningEmu
 import traceback
 
 try:
     from src.zxbc import version
     zx_basic_compiler = True
-    print(f"ZXBASIC version {version.VERSION}" )
+    print(f"ZXBASIC version {version.VERSION}")
 except Exception as e:
     zx_basic_compiler = False
     print(traceback.format_exc())
@@ -119,11 +119,17 @@ class MainWindow():
         self.vars['beeper.muted'] = tk.IntVar()
         self.vars['beeper.stereo'] = tk.IntVar()
         self.vars['beeper.mode'] = tk.StringVar()
-        self.vars['ay.muted'] = tk.IntVar()
-        self.vars['ay.a.muted'] = tk.IntVar()
-        self.vars['ay.b.muted'] = tk.IntVar()
+        self.vars['ay.emu'] = tk.StringVar()
+        self.vars['ay.py.muted'] = tk.IntVar()
+        self.vars['ay.py.a.muted'] = tk.IntVar()
+        self.vars['ay.py.b.muted'] = tk.IntVar()
+        self.vars['ay.py.c.muted'] = tk.IntVar()
+        self.vars['ay.py.stereo'] = tk.IntVar()
         self.vars['ay.c.muted'] = tk.IntVar()
-        self.vars['ay.stereo'] = tk.IntVar()
+        self.vars['ay.c.a.muted'] = tk.IntVar()
+        self.vars['ay.c.b.muted'] = tk.IntVar()
+        self.vars['ay.c.c.muted'] = tk.IntVar()
+        self.vars['ay.c.stereo'] = tk.IntVar()
         self.vars['usource.enabled'] = tk.IntVar()
         self.vars['usource.rom'] = tk.StringVar()
         self.vars['betadisk.enabled'] = tk.IntVar()
@@ -131,7 +137,7 @@ class MainWindow():
         self.vars['cartridge.enabled'] = tk.IntVar()
         self.vars['cartridge.rom'] = tk.StringVar()
 
-        self.active = Config.set_machine('current', vars=self.vars)
+        self.active = Config.load_machine_and_vars('current', vars=self.vars)
 
         self.title = Config.get('app.title', app_globals.APP_NAME)
         self.window.title(self.title)
@@ -327,17 +333,24 @@ class MainWindow():
         #
         # sound
         #
+        ay_emu = self.vars['ay.emu'].get()
         sound_menu = tk.Menu(menubar, tearoff=0)
         sound_menu.add_checkbutton(label='Beeper stereo', onvalue=1, offvalue=0, variable=self.vars['beeper.stereo'],
                                      command=lambda: self.emulator.set_sound(1, self.vars['beeper.stereo'].get()))
         sound_menu.add_checkbutton(label='Beeper muted', onvalue=1, offvalue=0, variable=self.vars['beeper.muted'],
                                      command=lambda: self.emulator.set_sound(0, self.vars['beeper.muted'].get()))
         sound_menu.add_separator()
-        sound_menu.add_checkbutton(label='AY stereo', onvalue=1, offvalue=0, variable=self.vars['ay.stereo'],
-                                     command=lambda: self.emulator.set_sound(32, self.vars['ay.stereo'].get()))
-        sound_menu.add_checkbutton(label='AY muted', onvalue=1, offvalue=0, variable=self.vars['ay.muted'],
-                                     command=lambda: self.emulator.set_sound(16, self.vars['ay.muted'].get()))
+
+        sound_type = tk.Menu(tape_menu, tearoff=0)
+        sound_type.add_radiobutton(label='AY Python emu', variable=self.vars['ay.emu'], value='py')
+        sound_type.add_radiobutton(label='Ay C emu', variable=self.vars['ay.emu'], value='c')
+        sound_menu.add_cascade(label='Select AY emulator', menu=sound_type, underline=0)
+        sound_menu.add_checkbutton(label='AY stereo', onvalue=1, offvalue=0, variable=self.vars[f'ay.{ay_emu}.stereo'],
+                                     command=lambda: self.emulator.set_sound(32, self.vars[f'ay.{ay_emu}.stereo'].get()))
+        sound_menu.add_checkbutton(label='AY muted', onvalue=1, offvalue=0, variable=self.vars[f'ay.{ay_emu}.muted'],
+                                     command=lambda: self.emulator.set_sound(16, self.vars[f'ay.{ay_emu}.muted'].get()))
         sound_menu.add_command(label='AY Tuning', command=self.ay_tuning)
+        
         self.sound_menu = sound_menu
         menubar.add_cascade(label='Sound', menu=sound_menu)
 
@@ -366,7 +379,7 @@ class MainWindow():
         options_menu.add_command(label="Editor", command=lambda: self.show_editor())
 
         options_menu.add_separator()
-        options_menu.add_command(label="Save configuration", command=lambda: Config.save(self.vars))
+        options_menu.add_command(label="Save configuration", command=lambda: Config.save_machine_vars(self.vars))
 
         self.options_menu = options_menu
         menubar.add_cascade(label='Options', menu=options_menu)
@@ -381,8 +394,8 @@ class MainWindow():
         credits_menu.add_command(label='SoftSpectrum48', command=lambda: webbrowser.open('https://softspectrum48.weebly.com/'))
         credits_menu.add_command(label='PyZXSpectrum', command=lambda: webbrowser.open('https://github.com/folkertvanheusden/PyZXSpectrum'))
         credits_menu.add_command(label='tzxtools - a collection for processing tzx files', command=lambda: webbrowser.open('https://github.com/shred/tzxtools'))
-        credits_menu.add_command(label='Russell Marks zmakebas.c', command=lambda: webbrowser.open('https://github.com/z00m128/zmakebas'))
-
+        credits_menu.add_command(label='Russell Marks - zmakebas.c', command=lambda: webbrowser.open('https://github.com/z00m128/zmakebas'))
+        credits_menu.add_command(label='Alexander Sashnov - libayemu', command=lambda: webbrowser.open('https://github.com/asashnov/libayemu'))
         about_menu.add_cascade(label='Credits', menu=credits_menu, underline=0)
 
         info_menu = tk.Menu(about_menu, tearoff=0)
@@ -396,7 +409,7 @@ class MainWindow():
 
         about_menu.add_cascade(label='Documentation', menu=info_menu, underline=0)
         about_menu.add_separator()
-        about_menu.add_command(label='speccy ver. 1.0')
+        about_menu.add_command(label='speccy ver. 2.0')
         menubar.add_cascade(label='About', menu=about_menu, underline=0)
 
         menubar.bind('<<MenuSelect>>', self.update_menu)
@@ -411,7 +424,8 @@ class MainWindow():
         self.status_bar = StatusBar(self.window, 'blue')
 
     def set_machine(self, type, vars):
-        Config.set_machine(type=type, vars=vars)
+        Config.save_machine_vars(vars)
+        Config.load_machine_and_vars(type=type, vars=vars)
 
     def configure_callback(self, event):
         Config.set('app.window.geometry', f'640x520+{self.window.winfo_x()}+{self.window.winfo_y()}')
@@ -430,7 +444,7 @@ class MainWindow():
         self.tape_menu.entryconfigure('Save', state=self.tape_state())
 
     def set_disk_entries(self):
-        Config.save(self.vars)
+        Config.save_machine_vars(self.vars)
         self.disk_menu.entryconfigure('Enter TR-DOS', state=self.disk_state())
         self.disk_menu.entryconfigure('Back to SOS', state=self.disk_state())
         self.disk_menu.entryconfigure('Drive B', state=self.disk_state())
@@ -614,7 +628,10 @@ class MainWindow():
 
     def ay_tuning(self):
         if self.emulator.machine and self.emulator.machine.AY:
-            self.ay_tuning_window = AYTuning(tk.Toplevel(self.window), self.emulator.machine)
+            if app_globals.lib_ay_emu and Config.get('ay.emu', 'py') == 'c':
+                self.ay_tuning_window = AYTuningEmu(tk.Toplevel(self.window), self.emulator.machine)
+            else:
+                self.ay_tuning_window = AYTuning(tk.Toplevel(self.window), self.emulator.machine)
 
     def msgbox(self, text):
         messagebox.showerror(self.title, text)
@@ -635,3 +652,20 @@ class ImageWindow():
 
     def configure_callback(self, event):
         Config.set('app.image.geometry', self.master.geometry())
+
+class Args:
+    def __init__(self, *args):
+        # tzxtools parameters
+        self.file = None
+        self.short = False #True
+        self.verbose = True
+        self.block = None           # 'block number to cat'
+        self.to = './out.tmp'       # 'target file, stdout if omitted'
+        self.skip = 0               # 'skip the given number of bytes before output'
+        self.length = 999999        # 'limit output to the given number of bytes'
+        self.text = False           # 'convert ZX Spectrum text to plain text'
+        self.basic = False          # 'convert ZX Spectrum BASIC to plain text'
+        self.assembler = False      # 'disassemble Z80 code'
+        self.screen = False         # 'convert a ZX Spectrum SCREEN$ to PNG'
+        self.dump = False           # 'convert to a hex dump'
+        self.org = 0x8000           # 'base address for disassembled code'

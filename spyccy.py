@@ -47,6 +47,7 @@ class Emulator(tk.Frame):
         self.thread = threading.Thread(target=asyncio.run, args=[self.machine.main_runner()], daemon=True)
         self.thread.start()
         self.window.status_bar.set_status('running')
+        self.window.status_bar.set_diskb(self.info())
 
     def stop(self):
         if self.machine and self.machine.status != MACHINE.STOPPED:
@@ -86,7 +87,7 @@ class Emulator(tk.Frame):
         self.start()
 
     def exit(self):
-        Config.save(self.window.vars)
+        Config.save_machine_vars(self.window.vars)
         self.stop()
         self.tk_root.quit()
 
@@ -174,6 +175,11 @@ class Emulator(tk.Frame):
         if self.machine:
             self.machine.joystick_type(type)
 
+    def info(self):
+        d = 'tk' if Config.get('display.renderer', 'tk') == 'tk' else 'sdl'
+        dc = 'c' if app_globals.lib_displayc else ''
+        ac = 'c' if app_globals.lib_ay_emu and Config.get('ay.emu', None) == 'c' else 'py'
+        return f"{d} {dc} | ay {ac}"
 #
 # main
 #
