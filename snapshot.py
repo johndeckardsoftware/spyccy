@@ -43,6 +43,7 @@ def extractMemoryBlock(data, fileOffset, isCompressed, unpackedLength):
 
         return memoryBytes
 
+# https://worldofspectrum.org/faq/reference/z80format.htm
 def parseZ80File(data):
     file = DataView(data)
 
@@ -78,15 +79,15 @@ def parseZ80File(data):
 
     if (snapshot['registers']['PC'] != 0):
         # a non-zero value for PC at offset 6 indicates a version 1 file
-        snapshot.model = 48
+        snapshot['model'] = 48
         memory = extractMemoryBlock(data, 30, byte12 & 0x20, 0xc000)
 
         # construct byte arrays of length 0x4000 at the appropriate offsets into the data stream
-        snapshot['memoryPages'][0] = extract(data, 0, 0x4000)
-        snapshot['memoryPages'][1] = extract(data, 0x4000, 0x4000)
-        snapshot['memoryPages'][2] = extract(data, 0x8000, 0x4000)
+        snapshot['memoryPages'][1] = extract(memory, 0, 0x4000)
+        snapshot['memoryPages'][2] = extract(memory, 0x4000, 0x4000)
+        snapshot['memoryPages'][3] = extract(memory, 0x8000, 0x4000)
 
-        snapshot.tstates = 0
+        snapshot['tstates'] = 0
     else:
         # version 2-3 snapshot
         additionalHeaderLength = file.getUint16(30, True)
@@ -145,11 +146,14 @@ def parseZ80File(data):
 
     return snapshot
 
+# https://github.com/tslabs/zx-evo/blob/master/pentevo/docs/Formats/sna.txt
+# for zx48, spyccy banks configuration is: 0 rom; 1,2,3 ram; 4 rom write; 5 usource rom; 6 tr-dos rom, 7 if2 cartridge 
 def parseSNAFile(data):
     mode128 = False
     snapshot = None
     size = len(data)
     sna = None
+    HEADER_SIZE = 27
 
     match size:
         case 131103 | 147487:
@@ -163,25 +167,29 @@ def parseSNAFile(data):
                 'model': 128 if mode128 else 48,
                 'registers': {},
                 'ulaState': {},
-                # construct byte arrays of length 0x4000 at the appropriate offsets into the data stream 
-                'memoryPages': {
-                    5: extract(data,0x0000 + 27, 0x4000),
-                    2: extract(data,0x4000 + 27, 0x4000)
-                },
+                'memoryPages': {},
                 'tstates': 0,
             }
 
             if mode128:
+                snapshot['memoryPages'][5] = extract(data, 0x0000 + HEADER_SIZE, 0x4000)
+                snapshot['memoryPages'][2] = extract(data, 0x4000 + HEADER_SIZE, 0x4000)
+            else:
+                snapshot['memoryPages'][1] = extract(data, 0x0000 + HEADER_SIZE, 0x4000)
+                snapshot['memoryPages'][2] = extract(data, 0x4000 + HEADER_SIZE, 0x4000)
+                snapshot['memoryPages'][3] = extract(data, 0x8000 + HEADER_SIZE, 0x4000)
+
+            if mode128:
                 page = (sna.getUint8(49181) & 7)
-                snapshot['memoryPages'][page] = extract(data, 0x8000 + 27, 0x4000)
+                snapshot['memoryPages'][page] = extract(data, 0x8000 + HEADER_SIZE, 0x4000)
 
                 ptr = 49183
                 for i in range(0, 8):
                     if i not in snapshot['memoryPages']:
                         snapshot['memoryPages'][i] = extract(data, ptr, 0x4000)
                         ptr += 0x4000
-            else:
-                snapshot['memoryPages'][0] = extract(data, 0x8000 + 27, 0x4000)
+            #else:
+            #    snapshot['memoryPages'][0] = extract(data, 0x8000 + HEADER_SIZE, 0x4000)
 
             snapshot['registers']['IR'] = (sna.getUint8(0) << 8) | sna.getUint8(20)
             snapshot['registers']['HL_'] = sna.getUint16(1, True)
@@ -204,9 +212,9 @@ def parseSNAFile(data):
             else:
                 # peek memory at SP to get proper value of PC
                 sp = sna.getUint16(23, True)
-                l = sna.getUint8(sp - 16384 + 27)
+                l = sna.getUint8(sp - 16384 + HEADER_SIZE)
                 sp = (sp + 1) & 0xffff
-                h = sna.getUint8(sp - 16384 + 27)
+                h = sna.getUint8(sp - 16384 + HEADER_SIZE)
                 sp = (sp + 1) & 0xffff
                 snapshot['registers']['PC'] = (h << 8) | l
                 snapshot['registers']['SP'] = sp

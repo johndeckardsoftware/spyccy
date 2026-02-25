@@ -316,9 +316,9 @@ class TZXFile :
 
                 case 0x21:
                     nameLength = tzx.getUint8(offset); offset += 1
-                    nameBytes = extract(data, offset, dataLength)
+                    nameBytes = extract(data, offset, nameLength)
                     offset += nameLength
-                    name = bytes(nameBytes).decode("utf-8")
+                    name = bytes(nameBytes).decode("cp1252")
                     tmp = {
                         'type': 'GroupStart',
                         'name': name
@@ -366,6 +366,7 @@ class TZXFile :
                     offset += (callCount * 2)
                     self.blocks.append(tmp)
                     break
+
                 case 0x27:
                     tmp = {
                         'type': 'ReturnFromSequence'
@@ -386,18 +387,19 @@ class TZXFile :
                     textLength = tzx.getUint8(offset); offset += 1
                     textBytes = extract(data, offset, textLength)
                     offset += textLength
-                    text = bytes(textBytes).decode("utf-8")
+                    text = bytes(textBytes).decode("cp1252")
                     tmp = {
                         'type': 'TextDescription',
                         'text': text
                     }
                     self.blocks.append(tmp)
+
                 case 0x31:
                     displayTime = tzx.getUint8(offset); offset += 1
                     textLength = tzx.getUint8(offset); offset += 1
                     textBytes = extract(data, offset, textLength)
                     offset += textLength
-                    text = bytes(textBytes).decode("utf-8")
+                    text = bytes(textBytes).decode("cp1252")
                     tmp = {
                         'type': 'MessageBlock',
                         'displayTime': displayTime,
@@ -413,6 +415,7 @@ class TZXFile :
                     }
                     offset += blockLength
                     self.blocks.append(tmp)
+
                 case 0x33:
                     blockLength = tzx.getUint8(offset) * 3; offset += 1
                     tmp = {
@@ -425,7 +428,7 @@ class TZXFile :
                 case 0x35:
                     identifierBytes = extract(data, offset, 10)
                     offset += 10
-                    identifier = bytes(identifierBytes).decode("utf-8")
+                    identifier = bytes(identifierBytes).decode("cp1252")
                     dataLength = tzx.getUint32(offset, True)
                     tmp = {
                         'type': 'CustomInfo',
@@ -507,7 +510,7 @@ class TZXFile :
                     # not one of the types we care about; skip past it
                     self.nextBlockIndex += 1
 
-    def getNextLoadableBlock(self,):
+    def getNextLoadableBlock(self):
         while True:
             block = self.getNextMeaningfulBlock(True)
             if (not block): return None
@@ -586,10 +589,13 @@ class TapeManager:
         self.dirty = 0
         return 1
 
+    # https://skoolkid.github.io/rom/asm/0556.html
+    # https://retroisle.com/sinclair/zxspectrum/Technical/Firmware/TapeLoadingRoutine.php
     def basic_load(self):
         if not self.tape: return
         block = self.tape.getNextLoadableBlock()
-        if not block: return
+        if not block:
+            return
 
         # get expected block type and load vs verify flag from AF'
         af_ = self.machine.cpu.get_af_()
@@ -598,7 +604,7 @@ class TapeManager:
         addr = self.machine.cpu.get_ix()
         requested_length = self.machine.cpu.get_de()
         actual_block_type = block[0]
-        #print(f"{expected_block_type=}, {actual_block_type=}, {requested_length=}, {len(block)=}")
+        print(f"{expected_block_type=}, {actual_block_type=}, {requested_length=}, {len(block)=}")
         success = True
         if expected_block_type != actual_block_type:
             success = False
@@ -610,6 +616,7 @@ class TapeManager:
                 while loaded_bytes < requested_length:
                     if (offset >= len(block)):
                         # have run out of bytes to load
+                        print(f"{offset=} >= {len(block)=}")
                         success = False
                         break
                     byte = block[offset]
@@ -626,12 +633,17 @@ class TapeManager:
                     success = checksum == expectedc_checksum
                 else:
                     # VERIFY. TODO: actually verify.
+                    print(f"{offset=} < {len(block)=}")
                     success = True
         if success:
             # set carry to indicate success
-            self.machine.cpu.set_af(self.machine.cpu.get_de() | 0x0001)
+            self.machine.cpu.set_af(self.machine.cpu.get_af() | 0x0001)
+            # set IX to the same value as if the block had been loaded by the ROM routine
+            self.machine.cpu.set_ix(addr)
+            self.machine.cpu.set_de(0)
         else:
             # reset carry to indicate failure
+            print(f"{expectedc_checksum=} {checksum=}")
             self.machine.cpu.set_af(self.machine.cpu.get_af() | 0xfffe)
 
         self.machine.cpu.set_pc(0x05e2)  # address at which to exit the tape trap
