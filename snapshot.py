@@ -10,65 +10,63 @@ def extract(data, offset, len):
     tmp = data[offset: offset + len]
     return tmp
 
-def extractMemoryBlock(data, fileOffset, isCompressed, unpackedLength):
-    if not isCompressed:
+def extract_memory_block(data, file_offset, is_compressed, unpacked_length):
+    if not is_compressed:
         # uncompressed; extract a byte array directly from data """
-        return array('B', extract(data, fileOffset, unpackedLength))
+        return array('B', extract(data, file_offset, unpacked_length))
     else:
         # compressed
-        #fileBytes = new Uint8Array(data, fileOffset);
-        fileBytes = data
-        memoryBytes = array('B', [0] * unpackedLength)
-        #filePtr = 0
-        filePtr = fileOffset 
-        memoryPtr = 0
-        while memoryPtr < unpackedLength:
+        file_bytes = data
+        memory_bytes = array('B', [0] * unpacked_length)
+        file_ptr = file_offset
+        memory_ptr = 0
+        while memory_ptr < unpacked_length:
             # check for coded ED ED nn bb sequence
             if ( # at least two bytes left to unpack
-                unpackedLength - memoryPtr >= 2 and 
-                fileBytes[filePtr] == 0xed and
-                fileBytes[filePtr + 1] == 0xed
+                unpacked_length - memory_ptr >= 2 and
+                file_bytes[file_ptr] == 0xed and
+                file_bytes[file_ptr + 1] == 0xed
             ):
                 # coded sequence
-                count = fileBytes[filePtr + 2]
-                value = fileBytes[filePtr + 3]
+                count = file_bytes[file_ptr + 2]
+                value = file_bytes[file_ptr + 3]
                 for i in range(0, count):
-                    memoryBytes[memoryPtr] = value
-                    memoryPtr += 1
-                filePtr += 4
+                    memory_bytes[memory_ptr] = value
+                    memory_ptr += 1
+                file_ptr += 4
             else: # plain byte
-                memoryBytes[memoryPtr] = fileBytes[filePtr]
-                memoryPtr += 1
-                filePtr += 1
+                memory_bytes[memory_ptr] = file_bytes[file_ptr]
+                memory_ptr += 1
+                file_ptr += 1
 
-        return memoryBytes
+        return memory_bytes
 
 # https://worldofspectrum.org/faq/reference/z80format.htm
-def parseZ80File(data):
+def parse_z80_file(data):
     file = DataView(data)
 
-    iReg = file.getUint8(10)
-    byte12 = file.getUint8(12)
-    rReg = (file.getUint8(11) & 0x7f) | ((byte12 & 0x01) << 7)
-    byte29 = file.getUint8(29)
+    i_reg = file.get_uint8(10)
+    byte12 = file.get_uint8(12)
+    r_reg = (file.get_uint8(11) & 0x7f) | ((byte12 & 0x01) << 7)
+    byte29 = file.get_uint8(29)
 
     snapshot = {
         'registers': {
-            'AF': file.getUint16(0, False), # NB Big-endian
-            'BC': file.getUint16(2, True),
-            'HL': file.getUint16(4, True),
-            'PC': file.getUint16(6, True),
-            'SP': file.getUint16(8, True),
-            'IR': (iReg << 8) | rReg,
-            'DE': file.getUint16(13, True),
-            'BC_': file.getUint16(15, True),
-            'DE_': file.getUint16(17, True),
-            'HL_': file.getUint16(19, True),
-            'AF_': file.getUint16(21, False), # Big-endian
-            'IY': file.getUint16(23, True),
-            'IX': file.getUint16(25, True),
-            'iff1': not not file.getUint8(27),
-            'iff2': not not file.getUint8(28),
+            'AF': file.get_uint16(0, False), # NB Big-endian
+            'BC': file.get_uint16(2, True),
+            'HL': file.get_uint16(4, True),
+            'PC': file.get_uint16(6, True),
+            'SP': file.get_uint16(8, True),
+            'IR': (i_reg << 8) | r_reg,
+            'DE': file.get_uint16(13, True),
+            'BC_': file.get_uint16(15, True),
+            'DE_': file.get_uint16(17, True),
+            'HL_': file.get_uint16(19, True),
+            'AF_': file.get_uint16(21, False), # Big-endian
+            'IY': file.get_uint16(23, True),
+            'IX': file.get_uint16(25, True),
+            'iff1': not not file.get_uint8(27),
+            'iff2': not not file.get_uint8(28),
             'im': byte29 & 0x03
         },
         'ulaState': {
@@ -80,7 +78,7 @@ def parseZ80File(data):
     if (snapshot['registers']['PC'] != 0):
         # a non-zero value for PC at offset 6 indicates a version 1 file
         snapshot['model'] = 48
-        memory = extractMemoryBlock(data, 30, byte12 & 0x20, 0xc000)
+        memory = extract_memory_block(data, 30, byte12 & 0x20, 0xc000)
 
         # construct byte arrays of length 0x4000 at the appropriate offsets into the data stream
         snapshot['memoryPages'][1] = extract(memory, 0, 0x4000)
@@ -90,35 +88,35 @@ def parseZ80File(data):
         snapshot['tstates'] = 0
     else:
         # version 2-3 snapshot
-        additionalHeaderLength = file.getUint16(30, True)
-        isVersion2 = (additionalHeaderLength == 23)
-        snapshot['registers']['PC'] = file.getUint16(32, True)
-        machineId = file.getUint8(34)
+        additional_header_length = file.get_uint16(30, True)
+        isVersion2 = (additional_header_length == 23)
+        snapshot['registers']['PC'] = file.get_uint16(32, True)
+        machineId = file.get_uint8(34)
         is48K = machineId < 3 if isVersion2 else machineId < 4
         snapshot['model'] = 48 if is48K else 128
         if (not is48K):
-            snapshot['ulaState']['pagingFlags'] = file.getUint8(35)
-        
-        tstateChunkSize = int((69888 if is48K else 70908) / 4)
-        snapshot['tstates'] = (
-            (((file.getUint8(57) + 1) % 4) + 1) * tstateChunkSize
-            - (file.getUint16(55, True) + 1)
-        )
-        if (snapshot['tstates'] >= tstateChunkSize * 4): snapshot['tstates'] = 0
+            snapshot['ulaState']['pagingFlags'] = file.get_uint8(35)
 
-        offset = 32 + additionalHeaderLength
+        tstate_chunk_size = int((69888 if is48K else 70908) / 4)
+        snapshot['tstates'] = (
+            (((file.get_uint8(57) + 1) % 4) + 1) * tstate_chunk_size
+            - (file.get_uint16(55, True) + 1)
+        )
+        if (snapshot['tstates'] >= tstate_chunk_size * 4): snapshot['tstates'] = 0
+
+        offset = 32 + additional_header_length
 
         # translation table from the IDs Z80 assigns to pages, to the page numbers they
         # actually get loaded into
-        pageIdToNumber = None
+        page_id_to_number = None
         if (is48K):
-            pageIdToNumber = {
+            page_id_to_number = {
                 4: 2,
                 5: 3,
                 8: 1
             }
         else:
-            pageIdToNumber = {
+            page_id_to_number = {
                 3: 0,
                 4: 1,
                 5: 2,
@@ -128,178 +126,178 @@ def parseZ80File(data):
                 9: 6,
                 10: 7
             }
-        tmp = data.buffer_info()
-        while offset < data.buffer_info()[1]:
-            compressedLength = file.getUint16(offset, True)
-            isCompressed = True
-            if compressedLength == 0xffff:
-                compressedLength = 0x4000
-                isCompressed = False
+        data_length = data.buffer_info()[1]
+        while offset < data_length:
+            compressed_length = file.get_uint16(offset, True)
+            is_compressed = True
+            if compressed_length == 0xffff:
+                compressed_length = 0x4000
+                is_compressed = False
 
-            pageId = file.getUint8(offset + 2)
-            if pageId in pageIdToNumber:
-                pageNumber = pageIdToNumber[pageId]
-                pageData = extractMemoryBlock(data, offset + 3, isCompressed, 0x4000)
-                snapshot['memoryPages'][pageNumber] = pageData
+            page_id = file.get_uint8(offset + 2)
+            if page_id in page_id_to_number:
+                page_number = page_id_to_number[page_id]
+                page_data = extract_memory_block(data, offset + 3, is_compressed, 0x4000)
+                snapshot['memoryPages'][page_number] = page_data
 
-            offset += compressedLength + 3
+            offset += compressed_length + 3
 
     return snapshot
 
 # https://github.com/tslabs/zx-evo/blob/master/pentevo/docs/Formats/sna.txt
-# for zx48, spyccy banks configuration is: 0 rom; 1,2,3 ram; 4 rom write; 5 usource rom; 6 tr-dos rom, 7 if2 cartridge 
-def parseSNAFile(data):
+# for zx48, spyccy banks configuration is: 0 rom; 1,2,3 ram; 4 rom write; 5 usource rom; 6 tr-dos rom, 7 if2 cartridge
+def parse_sna_file(data):
     mode128 = False
     snapshot = None
     size = len(data)
     sna = None
     HEADER_SIZE = 27
 
-    match size:
-        case 131103 | 147487:
-            mode128 = True
-        case 49179:
-            # sna = new DataView(data, 0, mode128 ? 49182 : len);
-            if mode128: sna = data[0: 0xc01e]
-            else: tmp = data
-            sna = DataView(tmp)
-            snapshot = {
-                'model': 128 if mode128 else 48,
-                'registers': {},
-                'ulaState': {},
-                'memoryPages': {},
-                'tstates': 0,
-            }
+    if size == 131103 or size == 147487:
+        mode128 = True
+    elif size == 49179:
+        mode128 = False
+    else:
+        raise Exception(f"parse_sna_file: Cannot handle SNA snapshots of length {size}")
 
-            if mode128:
-                snapshot['memoryPages'][5] = extract(data, 0x0000 + HEADER_SIZE, 0x4000)
-                snapshot['memoryPages'][2] = extract(data, 0x4000 + HEADER_SIZE, 0x4000)
-            else:
-                snapshot['memoryPages'][1] = extract(data, 0x0000 + HEADER_SIZE, 0x4000)
-                snapshot['memoryPages'][2] = extract(data, 0x4000 + HEADER_SIZE, 0x4000)
-                snapshot['memoryPages'][3] = extract(data, 0x8000 + HEADER_SIZE, 0x4000)
+    if mode128:
+        sna = data[0: 49182]
+    else:
+        sna = data
+    sna = DataView(sna)
 
-            if mode128:
-                page = (sna.getUint8(49181) & 7)
-                snapshot['memoryPages'][page] = extract(data, 0x8000 + HEADER_SIZE, 0x4000)
+    snapshot = {
+        'model': 128 if mode128 else 48,
+        'registers': {},
+        'ulaState': {},
+        'memoryPages': {},
+        'tstates': 0,
+    }
 
-                ptr = 49183
-                for i in range(0, 8):
-                    if i not in snapshot['memoryPages']:
-                        snapshot['memoryPages'][i] = extract(data, ptr, 0x4000)
-                        ptr += 0x4000
-            #else:
-            #    snapshot['memoryPages'][0] = extract(data, 0x8000 + HEADER_SIZE, 0x4000)
+    if mode128:
+        snapshot['memoryPages'][5] = extract(data, 0x0000 + HEADER_SIZE, 0x4000)
+        snapshot['memoryPages'][2] = extract(data, 0x4000 + HEADER_SIZE, 0x4000)
+    else:
+        snapshot['memoryPages'][1] = extract(data, 0x0000 + HEADER_SIZE, 0x4000)
+        snapshot['memoryPages'][2] = extract(data, 0x4000 + HEADER_SIZE, 0x4000)
+        snapshot['memoryPages'][3] = extract(data, 0x8000 + HEADER_SIZE, 0x4000)
 
-            snapshot['registers']['IR'] = (sna.getUint8(0) << 8) | sna.getUint8(20)
-            snapshot['registers']['HL_'] = sna.getUint16(1, True)
-            snapshot['registers']['DE_'] = sna.getUint16(3, True)
-            snapshot['registers']['BC_'] = sna.getUint16(5, True)
-            snapshot['registers']['AF_'] = sna.getUint16(7, True)
-            snapshot['registers']['HL'] = sna.getUint16(9, True)
-            snapshot['registers']['DE'] = sna.getUint16(11, True)
-            snapshot['registers']['BC'] = sna.getUint16(13, True)
-            snapshot['registers']['IY'] = sna.getUint16(15, True)
-            snapshot['registers']['IX'] = sna.getUint16(17, True)
-            snapshot['registers']['iff1'] = (sna.getUint8(19) & 0x04) >> 2
-            snapshot['registers']['iff2'] = (sna.getUint8(19) & 0x04) >> 2
-            snapshot['registers']['AF'] = sna.getUint16(21, True)
+    if mode128:
+        page = (sna.get_uint8(49181) & 7)
+        snapshot['memoryPages'][page] = extract(data, 0x8000 + HEADER_SIZE, 0x4000)
 
-            if mode128:
-                snapshot['registers']['SP'] = sna.getUint16(23, True)
-                snapshot['registers']['PC'] = sna.getUint16(49179, True)
-                snapshot['ulaState']['pagingFlags'] = sna.getUint8(49181)
-            else:
-                # peek memory at SP to get proper value of PC
-                sp = sna.getUint16(23, True)
-                l = sna.getUint8(sp - 16384 + HEADER_SIZE)
-                sp = (sp + 1) & 0xffff
-                h = sna.getUint8(sp - 16384 + HEADER_SIZE)
-                sp = (sp + 1) & 0xffff
-                snapshot['registers']['PC'] = (h << 8) | l
-                snapshot['registers']['SP'] = sp
+        ptr = 49183
+        for i in range(0, 8):
+            if i not in snapshot['memoryPages']:
+                snapshot['memoryPages'][i] = extract(data, ptr, 0x4000)
+                ptr += 0x4000
 
-            snapshot['registers']['im'] = sna.getUint8(25)
-            snapshot['ulaState']['borderColour'] = sna.getUint8(26)
+    snapshot['registers']['IR'] = (sna.get_uint8(0) << 8) | sna.get_uint8(20)
+    snapshot['registers']['HL_'] = sna.get_uint16(1, True)
+    snapshot['registers']['DE_'] = sna.get_uint16(3, True)
+    snapshot['registers']['BC_'] = sna.get_uint16(5, True)
+    snapshot['registers']['AF_'] = sna.get_uint16(7, True)
+    snapshot['registers']['HL'] = sna.get_uint16(9, True)
+    snapshot['registers']['DE'] = sna.get_uint16(11, True)
+    snapshot['registers']['BC'] = sna.get_uint16(13, True)
+    snapshot['registers']['IY'] = sna.get_uint16(15, True)
+    snapshot['registers']['IX'] = sna.get_uint16(17, True)
+    snapshot['registers']['iff1'] = (sna.get_uint8(19) & 0x04) >> 2
+    snapshot['registers']['iff2'] = (sna.get_uint8(19) & 0x04) >> 2
+    snapshot['registers']['AF'] = sna.get_uint16(21, True)
 
-        case default:
-            raise Exception(f"Cannot handle SNA snapshots of length {size}")
+    if mode128:
+        snapshot['registers']['SP'] = sna.get_uint16(23, True)
+        snapshot['registers']['PC'] = sna.get_uint16(49179, True)
+        snapshot['ulaState']['pagingFlags'] = sna.get_uint8(49181)
+    else:
+        # peek memory at SP to get proper value of PC
+        sp = sna.get_uint16(23, True)
+        l = sna.get_uint8(sp - 16384 + HEADER_SIZE)
+        sp = (sp + 1) & 0xffff
+        h = sna.get_uint8(sp - 16384 + HEADER_SIZE)
+        sp = (sp + 1) & 0xffff
+        snapshot['registers']['PC'] = (h << 8) | l
+        snapshot['registers']['SP'] = sp
+
+    snapshot['registers']['im'] = sna.get_uint8(25)
+    snapshot['ulaState']['borderColour'] = sna.get_uint8(26)
 
     return snapshot
 
-def getSZXIDString(file, offset):
+def get_szx_id_string(file: DataView, offset):
     ascii = []
-    ascii.append(file.getUint8(offset))
-    ascii.append(file.getUint8(offset+1))
-    ascii.append(file.getUint8(offset+2))
-    ascii.append(file.getUint8(offset+3))
+    ascii.append(file.get_uint8(offset))
+    ascii.append(file.get_uint8(offset+1))
+    ascii.append(file.get_uint8(offset+2))
+    ascii.append(file.get_uint8(offset+3))
     return ''.join(map(chr, ascii))
 
-def parseSZXFile(data):
+def parse_szx_file(data):
     file = DataView(data)
     fileLen = len(data)
     snapshot = {
         'memoryPages': {}
     }
 
-    if getSZXIDString(file, 0) != 'ZXST':
+    if get_szx_id_string(file, 0) != 'ZXST':
         raise Exception("Not a valid SZX file")
 
-    machineId = file.getUint8(6)
-    match machineId:
+    machine_id = file.get_uint8(6)
+    match machine_id:
         case 1:
             snapshot['model'] = 48
         case 2 | 3:
             snapshot['model'] = 128
         case 7:
             snapshot['model'] = 5
-        case default:
-            raise Exception("Unsupported machine type: " + machineId)
+        case _:
+            raise Exception(f"parse_szx_file: unsupported machine type: {machine_id}")
 
     offset = 8
     while offset < fileLen:
-        blockId = getSZXIDString(file, offset)
-        blockLen = file.getUint32(offset + 4, True)
+        block_id = get_szx_id_string(file, offset)
+        block_len = file.get_uint32(offset + 4, True)
         offset += 8
 
-        match blockId:
+        match block_id:
             case 'Z80R':
                 snapshot['registers'] = {
-                    'AF': file.getUint16(offset + 0, True),
-                    'BC': file.getUint16(offset + 2, True),
-                    'DE': file.getUint16(offset + 4, True),
-                    'HL': file.getUint16(offset + 6, True),
-                    'AF_': file.getUint16(offset + 8, True),
-                    'BC_': file.getUint16(offset + 10, True),
-                    'DE_': file.getUint16(offset + 12, True),
-                    'HL_': file.getUint16(offset + 14, True),
-                    'IX': file.getUint16(offset + 16, True),
-                    'IY': file.getUint16(offset + 18, True),
-                    'SP': file.getUint16(offset + 20, True),
-                    'PC': file.getUint16(offset + 22, True),
-                    'IR': file.getUint16(offset + 24, False),
-                    'iff1': not not file.getUint8(offset + 26),
-                    'iff2': not not file.getUint8(offset + 27),
-                    'im': file.getUint8(offset + 28),
+                    'AF': file.get_uint16(offset + 0, True),
+                    'BC': file.get_uint16(offset + 2, True),
+                    'DE': file.get_uint16(offset + 4, True),
+                    'HL': file.get_uint16(offset + 6, True),
+                    'AF_': file.get_uint16(offset + 8, True),
+                    'BC_': file.get_uint16(offset + 10, True),
+                    'DE_': file.get_uint16(offset + 12, True),
+                    'HL_': file.get_uint16(offset + 14, True),
+                    'IX': file.get_uint16(offset + 16, True),
+                    'IY': file.get_uint16(offset + 18, True),
+                    'SP': file.get_uint16(offset + 20, True),
+                    'PC': file.get_uint16(offset + 22, True),
+                    'IR': file.get_uint16(offset + 24, False),
+                    'iff1': not not file.get_uint8(offset + 26),
+                    'iff2': not not file.get_uint8(offset + 27),
+                    'im': file.get_uint8(offset + 28),
                 }
-                snapshot['tstates'] = file.getUint32(offset + 29, True)
-                snapshot['halted'] = not not (file.getUint8(offset + 37) & 0x02)
+                snapshot['tstates'] = file.get_uint32(offset + 29, True)
+                snapshot['halted'] = not not (file.get_uint8(offset + 37) & 0x02)
                 # currently ignored:
                 # chHoldIntReqCycles, eilast, memptr
 
             case 'SPCR':
                 snapshot['ulaState'] = {
-                    'borderColour': file.getUint8(offset + 0),
-                    'pagingFlags': file.getUint8(offset + 1),
+                    'borderColour': file.get_uint8(offset + 0),
+                    'pagingFlags': file.get_uint8(offset + 1),
                 }
                 # currently ignored:
                 # ch1ffd, chEff7, chFe
 
             case 'RAMP':
-                isCompressed = file.getUint16(offset + 0, True) & 0x0001
-                pageNumber = file.getUint8(offset + 2)
-                if isCompressed:
-                    compressedLength = blockLen - 3
+                is_compressed = file.get_uint16(offset + 0, True) & 0x0001
+                pageNumber = file.get_uint8(offset + 2)
+                if is_compressed:
+                    compressedLength = block_len - 3
                     compressed = extract(data, offset + 3, compressedLength)
                     pageData = zlib.decompress(compressed)
                     #pageData = pako.inflate(compressed)
@@ -308,35 +306,34 @@ def parseSZXFile(data):
                     pageData = extract(data, offset + 3, 0x4000)
                     snapshot['memoryPages'][pageNumber] = pageData
 
-            case default:
-                #print('skipping block', blockId)
-                pass
+            case _:
+                print(f'parse_szx_file: skipping block: {block_id}')
 
-        offset += blockLen
+        offset += block_len
 
     return snapshot
 
-def create_snapshot(board, cpu, mmu, ports, ay):
+def create_snapshot(board, cpu, mmu, ports, AY):
     page_size = mmu.get_page_size()
 
     # Compress the content of a memory bank into a byte array.
-    def  CompressData():
-        nonlocal page_size, previousByteSingleED, bankPos
+    def  compress_data():
+        nonlocal page_size, previous_byte_single_ED, bank_pos
 
-        content = bankData[bankPos]
+        content = bank_data[bank_pos]
         data = None
 
         # Every byte directly following a single ED is not taken into a block.
-        if (previousByteSingleED == True and content != 0xED):
+        if (previous_byte_single_ED == True and content != 0xED):
             data = array('B', [0])
             data[0] = content
-            previousByteSingleED = False
-            bankPos += 1
+            previous_byte_single_ED = False
+            bank_pos += 1
         else:
             # Calculate how many times the content at the current position is repeated.
             repeats = 1
-            if (bankPos < page_size - 1):
-                while ((bankData[bankPos + repeats] == content) and repeats < 0xFF and bankPos + repeats < page_size - 1):
+            if (bank_pos < page_size - 1):
+                while ((bank_data[bank_pos + repeats] == content) and repeats < 0xFF and bank_pos + repeats < page_size - 1):
                     repeats += 1
 
             # Check if the repeated content should be compressed.
@@ -351,11 +348,11 @@ def create_snapshot(board, cpu, mmu, ports, ay):
 
             # If the content is a single 0xED, self.will be taken into account on the next round.
             if (repeats == 1 and content == 0xED):
-                previousByteSingleED = True
+                previous_byte_single_ED = True
             else:
-                previousByteSingleED = False
+                previous_byte_single_ED = False
 
-            bankPos += repeats
+            bank_pos += repeats
 
         return data
 
@@ -423,80 +420,80 @@ def create_snapshot(board, cpu, mmu, ports, ay):
         snapshot[35] = ports.last_paging_value
 
         snapshot[38] = ports.last_ay_register
-        snapshot[39] = ay.read_register(0)
-        snapshot[40] = ay.read_register(1)
-        snapshot[41] = ay.read_register(2)
-        snapshot[42] = ay.read_register(3)
-        snapshot[43] = ay.read_register(4)
-        snapshot[44] = ay.read_register(5)
-        snapshot[45] = ay.read_register(6)
-        snapshot[46] = ay.read_register(7)
-        snapshot[47] = ay.read_register(8)
-        snapshot[48] = ay.read_register(9)
-        snapshot[49] = ay.read_register(10)
-        snapshot[50] = ay.read_register(11)
-        snapshot[51] = ay.read_register(12)
-        snapshot[52] = ay.read_register(13)
-        snapshot[53] = ay.read_register(14)
-        snapshot[54] = ay.read_register(15)
+        snapshot[39] = AY.read_register(0)
+        snapshot[40] = AY.read_register(1)
+        snapshot[41] = AY.read_register(2)
+        snapshot[42] = AY.read_register(3)
+        snapshot[43] = AY.read_register(4)
+        snapshot[44] = AY.read_register(5)
+        snapshot[45] = AY.read_register(6)
+        snapshot[46] = AY.read_register(7)
+        snapshot[47] = AY.read_register(8)
+        snapshot[48] = AY.read_register(9)
+        snapshot[49] = AY.read_register(10)
+        snapshot[50] = AY.read_register(11)
+        snapshot[51] = AY.read_register(12)
+        snapshot[52] = AY.read_register(13)
+        snapshot[53] = AY.read_register(14)
+        snapshot[54] = AY.read_register(15)
 
     # Store the _memory data.
     # We now need to step through the Spectrum RAM starting at byte 16384.
     # The memory bytes will be stored in the Snapshot array, compressed when needed.
-    bankPos = 0
-    storePos = 30 + snapshot[30] + 2
-    previousByteSingleED = False
-    bankData = None
+    bank_pos = 0
+    store_pos = 30 + snapshot[30] + 2
+    previous_byte_single_ED = False
+    bank_data = None
 
-    bankToPageMap = array('B', [99, 99, 99, 99, 99, 99, 99, 99])
+    bank_to_page_map = array('B', [99, 99, 99, 99, 99, 99, 99, 99])
 
     if (board.type == 48):
         # Spectrum 48K
-        bankToPageMap[2] = 4
-        bankToPageMap[3] = 5
-        bankToPageMap[1] = 8
+        bank_to_page_map[2] = 4
+        bank_to_page_map[3] = 5
+        bank_to_page_map[1] = 8
     else:
         # Spectrum 128K
-        bankToPageMap[0] = 3
-        bankToPageMap[1] = 4
-        bankToPageMap[2] = 5
-        bankToPageMap[3] = 6
-        bankToPageMap[4] = 7
-        bankToPageMap[5] = 8
-        bankToPageMap[6] = 9
-        bankToPageMap[7] = 10
+        bank_to_page_map[0] = 3
+        bank_to_page_map[1] = 4
+        bank_to_page_map[2] = 5
+        bank_to_page_map[3] = 6
+        bank_to_page_map[4] = 7
+        bank_to_page_map[5] = 8
+        bank_to_page_map[6] = 9
+        bank_to_page_map[7] = 10
 
     # Loop through the memory banks and save the data pages.
     for i in range(0, 8):
-        if bankToPageMap[i] != 99:
-            bankData = mmu.get_page_ram(i)
-            previousByteSingleED = False
+        if bank_to_page_map[i] != 99:
+            bank_data = mmu.get_page_ram(i)
+            previous_byte_single_ED = False
             pageData = array('B', [0] *18000)
-            bankPos = 0
+            bank_pos = 0
             pagePos = 0
             j = 0
             while True:
                 # Analyze the data at the current ram position and return an array to store in the Snapshot array.
-                compressedData = CompressData()
+                compressedData = compress_data()
                 # Append the returned array to the Snapshot array.
                 for j in range(0, len(compressedData)):
                     pageData[pagePos + j] = compressedData[j]
                 # Move the current position in the Snapshot array forward.
                 pagePos += j + 1
 
-                if bankPos >= page_size:
+                if bank_pos >= page_size:
                     break
 
             # Store the compressed bank in the main array.
-            snapshot[storePos] = pagePos & 0xff
-            snapshot[storePos + 1] = (pagePos >> 8) & 0xff
-            snapshot[storePos + 2] = bankToPageMap[i]
+            snapshot[store_pos] = pagePos & 0xff
+            snapshot[store_pos + 1] = (pagePos >> 8) & 0xff
+            snapshot[store_pos + 2] = bank_to_page_map[i]
 
             for k in range(0, pagePos):
-                snapshot[storePos + 3 + k] = pageData[k]
+                snapshot[store_pos + 3 + k] = pageData[k]
 
-            storePos = storePos + 3 + pagePos
+            store_pos = store_pos + 3 + pagePos
 
-    return snapshot, storePos
+    return snapshot, store_pos
 
 

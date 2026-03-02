@@ -27,7 +27,7 @@ from config import *
 from ui import MainWindow
 from zxs48a import ZXSpectrum48a
 from zxs128a import ZXSpectrum128a
-import z80profile2
+#import z80profile2
 
 
 class Emulator(tk.Frame):
@@ -79,8 +79,7 @@ class Emulator(tk.Frame):
             self.window.status_bar.set_status('resumed')
 
     def reset(self):
-        if self.machine:
-            return self.machine.reset(pc=0)
+        if self.machine: return self.machine.reset(pc=0)
 
     def restart(self):
         self.stop()
@@ -92,12 +91,10 @@ class Emulator(tk.Frame):
         self.tk_root.quit()
 
     def load_disk(self, drive, filename):
-        if self.machine:
-            return self.machine.load_disk(drive, filename)
+        if self.machine: return self.machine.load_disk(drive, filename)
 
     def save_disk(self, drive, filename=None):
-        if self.machine:
-            return self.machine.save_disk(drive, filename)
+        if self.machine: return self.machine.save_disk(drive, filename)
 
     def eject_disk(self, drive):
         if self.machine:
@@ -106,33 +103,31 @@ class Emulator(tk.Frame):
             return ret
 
     def usource_enable(self, val):
-        if self.machine:
-            self.machine.usource_enable(val)
+        if self.machine: self.machine.usource_enable(val)
 
     def insert_cartridge(self):
         self.pause(wait_eof=True)
         self.restart()
 
     def eject_cartridge(self):
-        if self.machine:
-            self.machine.eject_cartridge()
+        if self.machine: self.machine.eject_cartridge()
 
-    def tape_enable(self, val):
-        if self.machine:
-            self.machine.tapedeck.set_traps(val)
+    def set_tape_fast_load(self, val):
+        if self.machine: self.machine.tapedeck.tape_fast_load = val
 
     def set_tape_auto_load(self, val):
-        if self.machine:
-            self.machine.tapedeck.auto_load = val
+        if self.machine: self.machine.tapedeck.tape_auto_load = val
+
+    def tape_new(self):
+        if self.machine: pass
 
     def tape_load(self, file):
         if self.machine:
-            if self.machine.tapedeck.load(file):
-                self.machine.tapedeck.play()
+            if self.machine.tapedeck.open_tape(file):
+                self.machine.tapedeck.play_tape(True)
 
     def tape_play(self):
-        if self.machine:
-            self.machine.tapedeck.play()
+        if self.machine: self.machine.tapedeck.play_tape(True)
 
     def tape_stop(self):
         if self.machine:
@@ -140,40 +135,31 @@ class Emulator(tk.Frame):
             self.window.status_bar.set_tape('')
 
     def tape_save(self):
-        if self.machine:
-            self.machine.tapedeck.save()
+        if self.machine: self.machine.tapedeck.save_to_tape()
 
     def process_snapshot(self, file):
-        if self.machine:
-            self.machine.process_snapshot(file)
+        if self.machine: self.machine.process_snapshot(file)
 
     def save_snapshot(self, file):
-        if self.machine:
-            self.machine.save_snapshot(file)
+        if self.machine: self.machine.save_snapshot(file)
 
     def display_zoom(self, zoom):
-        if self.machine:
-            self.machine.set_zoom(zoom)
+        if self.machine: self.machine.set_zoom(zoom)
 
     def keyboard_type(self, type):
-        if self.machine:
-            self.machine.keyboard_type(type)
+        if self.machine: self.machine.keyboard_type(type)
 
     def key_sequence(self, key_sequence_id):
-        if self.machine:
-            self.machine.key_sequence(key_sequence_id)
+        if self.machine: self.machine.key_sequence(key_sequence_id)
 
     def keyboard_help(self):
-        if self.machine:
-            self.machine.keyboard_help()
+        if self.machine: self.machine.keyboard_help()
 
     def set_sound(self, what, val):
-        if self.machine:
-            self.machine.set_sound(what, val)
+        if self.machine: self.machine.set_sound(what, val)
 
     def joystick_type(self, type):
-        if self.machine:
-            self.machine.joystick_type(type)
+        if self.machine: self.machine.joystick_type(type)
 
     def info(self):
         d = 'tk' if Config.get('display.renderer', 'tk') == 'tk' else 'sdl'

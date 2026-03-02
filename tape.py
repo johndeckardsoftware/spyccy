@@ -1,746 +1,286 @@
-from array import array
 from tkinter import messagebox
-from tkinter import filedialog
-from dataview import DataView
-from config import *
-from snapshot import parseZ80File, parseSZXFile
-import app_globals
+from app_globals import APP_NAME
 
-def extract(data, offset, len): return data[offset: offset + len]
+class TapeBlock:
+    class BlockType:
+        PROGRAM_HEADER = 0
+        NUMBER_ARRAY_HEADER = 1
+        CHARACTER_ARRAY_HEADER = 2
+        CODE_HEADER = 3
+        DATA_BLOCK = 4
+        INFO = 5
+        UNASSIGNED = 6
 
-class ToneSegment :
-    def __init__(self, pulseLength, pulseCount):
-        self.pulseLength = pulseLength
-        self.pulseCount = pulseCount
-        self.pulsesGenerated = 0
+    def __init__(self, file_name=None, type=None, start_position=0, index=0, block_content=None,
+                    is_headerless=False, checksum=0, block_type_num=0):
+        # index (position) of the tape block in the tape file.
+        self.index = index
 
-    def isFinished(self):
-        return self.pulsesGenerated == self.pulseCount
+        # type of tape block (enum).
+        self.type = type
 
-    def getNextPulseLength(self):
-        self.pulsesGenerated += 1
-        return self.pulseLength
+        # file name in header block.
+        self.file_name = file_name
 
-class PulseSequenceSegment :
-    def __init__(self, pulses):
-        self.pulses = pulses
-        self.index = 0
+        # the block data.
+        self.block_content = block_content
 
-    def isFinished(self,):
-        return self.index == len(self.pulses)
+        # set to True for data blocks without a header.
+        self.is_headerless = is_headerless
 
-    def getNextPulseLength(self):
-        i = self.pulses[self.index]
-        self.index += 1
-        return i
+        # header checksum byte.
+        self.checksum = checksum
 
-class DataSegment :
-    def __init__(self, data, zeroPulseLength, onePulseLength, lastByteBits):
-        self.data = data
-        self.zeroPulseLength = zeroPulseLength
-        self.onePulseLength = onePulseLength
-        self.bitCount = (len(self.data) - 1) * 8 + lastByteBits
-        self.pulsesOutput = 0
-        self.lastPulseLength = None
+        # block type, 0x00 = header; 0x_ff = data block.
+        self.block_type_num = block_type_num
 
-    def isFinished(self,):
-        return self.pulsesOutput == self.bitCount * 2
+        # where in the translated tape data is the start point of this block?
+        self.start_position = start_position
 
-    def getNextPulseLength(self):
-        if (self.pulsesOutput & 0x01):
-            self.pulsesOutput += 1
-            return self.lastPulseLength
+        # number of pulses in the translated tape data.
+        self.number_of_pulses = 0
+
+    @property
+    def block_length(self):
+        if self.block_content is not None:
+            return f"{len(self.block_content)}"
         else:
-            bitIndex = self.pulsesOutput >> 1
-            byteIndex = bitIndex >> 3
-            bitMask = 1 << (7 - (bitIndex & 0x07))
-            self.lastPulseLength = self.onePulseLength if (self.data[byteIndex] & bitMask) else self.zeroPulseLength
-            self.pulsesOutput += 1
-            return self.lastPulseLength
+            return "0"
 
-class PauseSegment :
-    def __init__(self, duration):
-        self.duration = duration
-        self.emitted = False
+class TapeSignal:
+    def __init__(self, number_of_pulses=0, pause=False, force_high=False, force_low=False, pulse_length=0, stop_tape=False, is_leader=False):
+        self.number_of_pulses: int = number_of_pulses
+        self.pause: bool = pause
+        self.force_high: bool = force_high
+        self.force_low: bool = force_low
+        self.pulse_length: int = pulse_length
+        self.stop_tape: bool = stop_tape
+        self.is_leader: bool = is_leader
 
-    def isFinished(self):
-        return self.emitted
+# Base class for tape file processing.
+class Tape:
+    # extra offset for the start of the actual block data in a tape file data block.
+    data_index_adjustment = 0
 
-    def getNextPulseLength(self):
-        # TODO: take level back down to 0 after 1ms if it's currently high
-        self.emitted = True
-        return self.duration * 3500
+    # the standard number of leader pulses for header blocks.
+    header_leader_pulses = 8063
 
-class PulseGenerator :
-    def __init__(self, getSegments):
-        self.segments = []
-        self.getSegments = getSegments
-        self.level = 0x0000
-        self.tapeIsFinished = False;  # if True, don't call getSegments again
-        self.pendingCycles = 0
+    # the standard number of leader pulses for data blocks.
+    data_leader_pulses = 3223
 
-    def addSegment(self, segment):
-        self.segments.append(segment)
+    # the standard length in t-states for leader pulses.
+    leader_pulse_length = 2168
 
-    def emitPulses(self, buffer, startIndex, cycleCount):
-        cyclesEmitted = 0
-        index = startIndex
-        isFinished = False
-        while cyclesEmitted < cycleCount:
-            if self.pendingCycles > 0:
-                if self.pendingCycles >= 0x8000:
-                    # emit a pulse of length 0x7fff
-                    buffer[index] = self.level | 0x7fff
-                    index += 1
-                    cyclesEmitted += 0x7fff
-                    self.pendingCycles -= 0x7fff
-                else:
-                    # emit a the remainder of self.pulse in full
-                    buffer[index] = self.level | self.pendingCycles
-                    index += 1
-                    cyclesEmitted += self.pendingCycles
-                    self.pendingCycles = 0
+    # the standard length in t-states for the first sync pulse.
+    first_sync_pulse_length = 667
 
-            elif len(self.segments) == 0:
-                if self.tapeIsFinished:
-                    # mark end of tape
-                    isFinished = True
-                    break
-                else:
-                    # get more segments
-                    self.tapeIsFinished = not self.getSegments(self)
+    # the standard length in t-states for the second sync pulse.
+    second_sync_pulse_length = 735
 
-            elif self.segments[0].isFinished():
-                # discard finished segment
-                self.segments.pop(0)
-            else:
-                # new pulse
-                self.pendingCycles = self.segments[0].getNextPulseLength()
-                self.level ^= 0x8000
+    # the standard length in t-states for zero bit pulses.
+    zero_bit_pulse_length = 855
 
-        return [index, cyclesEmitted, isFinished]
+    # the standard length in t-states for one bit pulses.
+    one_bit_pulse_length = 1710
 
-# https://sinclair.wiki.zxnet.co.uk/wiki/TAP_format
-class TAPFile:
-    def __init__(self, data):
-        if data:
-            self.data = data
-        else:
-            self.data = array("B")
-        self.blocks = self.get_blocks(self.data)
-        self.next_block_index = 0
-        #self.pulseGenerator = PulseGenerator(self._generator)
+    # number of t-states per millsecond.
+    t_states_per_milli_second = 3500
 
-    def get_blocks(self, data):
-        tap = DataView(data)
-        blocks = []
-        i = 0
-        while (i+1) < len(data):
-            block_length = tap.getUint16(i, True)
-            i += 2
-            blocks.append(extract(data, i, block_length))
-            i += block_length
-        return blocks
+    def __init__(self, file_content):
+        # the content of a tape file in the form of a byte array.
+        self._file_content = file_content
 
-    def getNextLoadableBlock(self):
-        if (len(self.blocks) == 0):
-            return None
-        block = self.blocks[self.next_block_index]
-        self.next_block_index = (self.next_block_index + 1) % len(self.blocks)
-        return block
+        # the current read position in the <see cref="_file_content"/> array during the tape data processing.
+        self._file_content_index = 0
 
-    @staticmethod
-    def is_valid(data):
-        # test whether the given ArrayBuffer is a valid TAP file, i.e. EOF is consistent with the
-        # block lengths we read from the file
-        pos = 0
-        tap = DataView(data)
-        while pos < len(data):
-            if pos + 1 >= len(data):
-                return False # EOF in the middle of a length word
-            blockLength = tap.getUint16(pos, True)
-            pos += blockLength + 2
+        # the currently processed <see cref="TapeBlock"/> in the <see cref="tape_listing"/>.
+        self._tape_listing_index = 0
 
-        return (pos == len(data)) # file is a valid TAP if pos is exactly at EOF and no further
+        # the length of the currently processed tape block.
+        self._block_length = 0
 
-    def _generator(self, generator):
-        if len(self.blocks) == 0:
+        # create a list of tape_blocks.
+        self.tape_listing = []
+
+        # create a list of signals.
+        self.signals = []
+
+        self.process_tape()
+
+    def process_tape(self):
+        raise NotImplementedError
+
+    def update_tape_listing(self, block_length, file_content_index, data_index_adjustment, tape_listing_index, signal_index):
+        if file_content_index + block_length > len(self._file_content):
+            self.file_error()
             return False
 
-        block = self.blocks[self.next_block_index]
-        self.next_block_index = (self.next_block_index + 1) % len(self.blocks)
+        # get the start of the block content.
+        block_content_index = file_content_index + data_index_adjustment
 
-        if block[0] & 0x80:
-            # add short leader tone for data block
-            generator.addSegment(ToneSegment(2168, 3223))
+        # read the flag byte from the block.
+        # if the last block is a fragmented data block, there is no flag byte, so set the flag to 255
+        # to indicate a data block.
+        if block_content_index + 2 < len(self._file_content):
+            flag_byte = self._file_content[block_content_index + 2]
         else:
-            # add long leader tone for header block
-            generator.addSegment(ToneSegment(2168, 8063))
+            flag_byte = 255
 
-        generator.addSegment(PulseSequenceSegment([667, 735]))
-        generator.addSegment(DataSegment(block, 855, 1710, 8))
-        generator.addSegment(PauseSegment(1000))
+        if flag_byte == 0 and block_length > 19:
+            flag_byte = 0
 
-        # return False if tape has ended
-        return self.next_block_index != 0
+        # process the block depending on if it is a header or a data block.
+        # block type 0 should be a header block, but it happens that headerless blocks also
+        # have block type 0, so we need to check the block length as well.
+        if flag_byte == 0 and block_length == 19:
+            # this is a header.
 
-class TZXFile :
-    @staticmethod
-    def is_valid(data):
-        tzx = DataView(data)
-        signature = list(b"ZXTape!\x1A")
-        for (i, b) in enumerate(signature):
-            if b != tzx.getUint8(i):
-                return False
+            # get the block type.
+            b = self._file_content[block_content_index + 3]
+            if b == 0:
+                data_block_type = TapeBlock.BlockType.PROGRAM_HEADER
+            elif b == 1:
+                data_block_type = TapeBlock.BlockType.NUMBER_ARRAY_HEADER
+            elif b == 2:
+                data_block_type = TapeBlock.BlockType.CHARACTER_ARRAY_HEADER
+            elif b == 3:
+                data_block_type = TapeBlock.BlockType.CODE_HEADER
+            else:
+                data_block_type = TapeBlock.BlockType.UNASSIGNED
+
+            # get the filename.
+            file_name = ""
+            for i in range(0, 10):
+                ascii_code = self._file_content[block_content_index + 4 + i]
+                file_name += chr(ascii_code)
+
+            # get the block content (the 17 bytes of the header, including block type, filename and header info).
+            block_content = bytearray(17)
+            for i in range(0, 17):
+                block_content[i] = self._file_content[block_content_index + 3 + i]
+
+            # get the checksum.
+            checksum = self._file_content[block_content_index + 20]
+
+            # add the block information to the tape listing.
+            self.tape_listing.append(
+                TapeBlock(
+                    file_name=file_name,
+                    type=data_block_type,
+                    start_position=signal_index,
+                    index=tape_listing_index,
+                    block_content=block_content,
+                    is_headerless=False,
+                    checksum=checksum,
+                    block_type_num=0,
+                )
+            )
+        else:
+            # this is a data block.
+
+            # get the block content length.
+            if block_length >= 2:
+                # normally the content length equals the block length minus two
+                # (the flag byte and the checksum are not included in the content).
+                content_length = block_length - 2
+
+                # the content is found at an offset of 3 (two byte block size + one flag byte).
+                content_offset = 3
+            else:
+                # fragmented data doesn't have a flag byte or a checksum.
+                content_length = block_length
+
+                # the content is found at an offset of 2 (two byte block size).
+                content_offset = 2
+
+            # get the block content.
+            block_content = bytearray(content_length)
+
+            for i in range(0, content_length):
+                block_content[i] = self._file_content[block_content_index + content_offset + i]
+
+            # if the preceeding block is a data block, this is a headerless block.
+            if tape_listing_index > 0 and self.tape_listing[tape_listing_index - 1].type == TapeBlock.BlockType.DATA_BLOCK:
+                is_headerless = True
+            else:
+                is_headerless = False
+
+            # get the checksum.
+            checksum = self._file_content[block_content_index + 1 + block_length]
+
+            # add the block information to the tape listing.
+            self.tape_listing.append(
+                TapeBlock(
+                    type=TapeBlock.BlockType.DATA_BLOCK,
+                    start_position=signal_index,
+                    index=self._tape_listing_index,
+                    block_content=bytes(block_content),
+                    is_headerless=is_headerless,
+                    checksum=checksum,
+                    block_type_num=flag_byte,
+                )
+            )
+
         return True
 
-    def __init__(self, data):
-        self.blocks = []
-        tzx = DataView(data)
+    def apply_leader_and_sync_pulses(self, number_of_leader_pulses, leader_pulse_length, first_sync_pulse_length, second_sync_pulse_length):
+        self.signals.append(TapeSignal(number_of_pulses=number_of_leader_pulses, pulse_length=leader_pulse_length, is_leader=True))
+        self.signals.append(TapeSignal(number_of_pulses=1, pulse_length=first_sync_pulse_length))
+        self.signals.append(TapeSignal(number_of_pulses=1, pulse_length=second_sync_pulse_length))
 
-        offset = 0x0a
-
-        while (offset < len(data)):
-            block_type = tzx.getUint8(offset)
-            offset += 1
-            match block_type:
-                case 0x10:
-                    pause = tzx.getUint16(offset, True)
-                    offset += 2
-                    dataLength = tzx.getUint16(offset, True)
-                    offset += 2
-                    blockData = extract(data, offset, dataLength)
-                    tmp = {
-                        'type': 'StandardSpeedData',
-                        'pause': pause,
-                        'data': blockData,
-                        'generatePulses': None
-                    }
-                    self.blocks.append(tmp)
-                    offset += dataLength
-
-                case 0x11:
-                    pilotPulseLength = tzx.getUint16(offset, True); offset += 2
-                    syncPulse1Length = tzx.getUint16(offset, True); offset += 2
-                    syncPulse2Length = tzx.getUint16(offset, True); offset += 2
-                    zeroBitLength = tzx.getUint16(offset, True); offset += 2
-                    oneBitLength = tzx.getUint16(offset, True); offset += 2
-                    pilotPulseCount = tzx.getUint16(offset, True); offset += 2
-                    lastByteMask = tzx.getUint8(offset); offset += 1
-                    pause = tzx.getUint16(offset, True); offset += 2
-                    dataLength = tzx.getUint16(offset, True) | (tzx.getUint8(offset+2) << 16); offset += 3
-                    blockData = extract(data, offset, dataLength)
-                    tmp = {
-                        'type': 'TurboSpeedData',
-                        'pilotPulseLength': pilotPulseLength,
-                        'syncPulse1Length': syncPulse1Length,
-                        'syncPulse2Length': syncPulse2Length,
-                        'zeroBitLength': zeroBitLength,
-                        'oneBitLength': oneBitLength,
-                        'pilotPulseCount': pilotPulseCount,
-                        'lastByteMask': lastByteMask,
-                        'pause': pause,
-                        'data': blockData,
-                        'generatePulses': None
-                    }
-                    self.blocks.append(tmp)
-                    offset += dataLength
-
-                case 0x12:
-                    pulseLength = tzx.getUint16(offset, True); offset += 2
-                    pulseCount = tzx.getUint16(offset, True); offset += 2
-                    tmp = {
-                        'type': 'PureTone',
-                        'pulseLength': pulseLength,
-                        'pulseCount': pulseCount,
-                        'generatePulses': None
-                    }
-                    self.blocks.append(tmp)
-
-                case 0x13:
-                    pulseCount = tzx.getUint8(offset); offset += 1
-                    pulseLengths = []
-                    for i in range(0, pulseCount):
-                        pulseLengths[i] = tzx.getUint16(offset + i*2, True)
-                    tmp = {
-                        'type': 'PulseSequence',
-                        'pulseLengths': pulseLengths,
-                        'generatePulses': None
-                    }
-                    self.blocks.append(tmp)
-                    offset += (pulseCount * 2)
-
-                case 0x14:
-                    zeroBitLength = tzx.getUint16(offset, True); offset += 2
-                    oneBitLength = tzx.getUint16(offset, True); offset += 2
-                    lastByteMask = tzx.getUint8(offset); offset += 1
-                    pause = tzx.getUint16(offset, True); offset += 2
-                    dataLength = tzx.getUint16(offset, True) | (tzx.getUint8(offset+2) << 16); offset += 3
-                    blockData = extract(data, offset, dataLength)
-                    tmp = {
-                        'type': 'PureData',
-                        'zeroBitLength': zeroBitLength,
-                        'oneBitLength': oneBitLength,
-                        'lastByteMask': lastByteMask,
-                        'pause': pause,
-                        'data': blockData,
-                        'generatePulses': None
-                    }
-                    self.blocks.append(tmp)
-                    offset += dataLength
-
-                case 0x15:
-                    tstatesPerSample = tzx.getUint16(offset, True); offset += 2
-                    pause = tzx.getUint16(offset, True); offset += 2
-                    lastByteMask = tzx.getUint8(offset); offset += 1
-                    dataLength = tzx.getUint16(offset, True) | (tzx.getUint8(offset+2) << 16); offset += 3
-                    tmp = {
-                        'type': 'DirectRecording',
-                        'tstatesPerSample': tstatesPerSample,
-                        'lastByteMask': lastByteMask,
-                        'pause': pause,
-                        'data': extract(data, offset, dataLength)
-                    }
-                    self.blocks.append(tmp)
-                    offset += dataLength
-
-                case 0x20:
-                    # TODO: handle pause length of 0 (= stop tape)
-                    pause = tzx.getUint16(offset, True); offset += 2
-                    tmp = {
-                        'type': 'Pause',
-                        'pause': pause,
-                        'generatePulses': None
-                    }
-                    self.blocks.append(tmp)
-
-                case 0x21:
-                    nameLength = tzx.getUint8(offset); offset += 1
-                    nameBytes = extract(data, offset, nameLength)
-                    offset += nameLength
-                    name = bytes(nameBytes).decode("cp1252")
-                    tmp = {
-                        'type': 'GroupStart',
-                        'name': name
-                    }
-                    self.blocks.append(tmp)
-
-                case 0x22:
-                    tmp = {
-                        'type': 'GroupEnd'
-                    }
-                    self.blocks.append(tmp)
-
-                case 0x23:
-                    jumpOffset = tzx.getUint16(offset, True); offset += 2
-                    tmp = {
-                        'type': 'JumpToBlock',
-                        'offset': jumpOffset
-                    }
-                    self.blocks.append(tmp)
-
-                case 0x24:
-                    repeatCount = tzx.getUint16(offset, True); offset += 2
-                    tmp = {
-                        'type': 'LoopStart',
-                        'repeatCount': repeatCount
-                    }
-                    self.blocks.append(tmp)
-
-                case 0x25:
-                    tmp = {
-                        'type': 'LoopEnd'
-                    }
-                    self.blocks.append(tmp)
-
-                case 0x26:
-                    callCount = tzx.getUint16(offset, True); offset += 2
-                    offsets = []
-                    for i in range(0, callCount):
-                        offsets[i] = tzx.getUint16(offset + i*2, True)
-
-                    tmp = {
-                        'type': 'CallSequence',
-                        'offsets': offsets
-                    }
-                    offset += (callCount * 2)
-                    self.blocks.append(tmp)
-                    break
-
-                case 0x27:
-                    tmp = {
-                        'type': 'ReturnFromSequence'
-                    }
-                    self.blocks.append(tmp)
-
-                case 0x28:
-                    blockLength = tzx.getUint16(offset, True); offset += 2
-                    # This is a silly block. Don't bother parsing it further.
-                    tmp = {
-                        'type': 'Select',
-                        'data': extract(data, offset, blockLength)
-                    }
-                    offset += blockLength
-                    self.blocks.append(tmp)
-
-                case 0x30:
-                    textLength = tzx.getUint8(offset); offset += 1
-                    textBytes = extract(data, offset, textLength)
-                    offset += textLength
-                    text = bytes(textBytes).decode("cp1252")
-                    tmp = {
-                        'type': 'TextDescription',
-                        'text': text
-                    }
-                    self.blocks.append(tmp)
-
-                case 0x31:
-                    displayTime = tzx.getUint8(offset); offset += 1
-                    textLength = tzx.getUint8(offset); offset += 1
-                    textBytes = extract(data, offset, textLength)
-                    offset += textLength
-                    text = bytes(textBytes).decode("cp1252")
-                    tmp = {
-                        'type': 'MessageBlock',
-                        'displayTime': displayTime,
-                        'text': text
-                    }
-                    self.blocks.append(tmp)
-
-                case 0x32:
-                    blockLength = tzx.getUint16(offset, True); offset += 2
-                    tmp = {
-                        'type': 'ArchiveInfo',
-                        'data': extract(data, offset, blockLength)
-                    }
-                    offset += blockLength
-                    self.blocks.append(tmp)
-
-                case 0x33:
-                    blockLength = tzx.getUint8(offset) * 3; offset += 1
-                    tmp = {
-                        'type': 'HardwareType',
-                        'data': extract(data, offset, blockLength)
-                    }
-                    offset += blockLength
-                    self.blocks.append(tmp)
-
-                case 0x35:
-                    identifierBytes = extract(data, offset, 10)
-                    offset += 10
-                    identifier = bytes(identifierBytes).decode("cp1252")
-                    dataLength = tzx.getUint32(offset, True)
-                    tmp = {
-                        'type': 'CustomInfo',
-                        'identifier': identifier,
-                        'data': extract(data, offset, dataLength)
-                    }
-                    offset += dataLength
-                    self.blocks.append(tmp)
-
-                case 0x5A:
-                    offset += 9
-                    tmp = {
-                        'type': 'Glue'
-                    }
-                    self.blocks.append(tmp)
-
-                case default:
-                    # follow extension rule: next 4 bytes = length of block
-                    blockLength = tzx.getUint32(offset, True)
-                    offset += 4
-                    tmp = {
-                        'type': 'unknown',
-                        'data': extract(data, offset, blockLength)
-                    }
-                    offset += blockLength
-                    self.blocks.append(tmp)
-
-        self.nextBlockIndex = 0
-        self.loopToBlockIndex = 0
-        self.repeatCount = 0
-        self.callStack = []
-        self.pulseGenerator = None #PulseGenerator()
-
-    def getNextMeaningfulBlock(self,wrapAtEnd):
-        startedAtZero = (self.nextBlockIndex == 0)
-        while True:
-            if (self.nextBlockIndex >= len(self.blocks)):
-                if (startedAtZero or not wrapAtEnd): return None; # have looped around; quit now
-                self.nextBlockIndex = 0
-                startedAtZero = True
-
-            block = self.blocks[self.nextBlockIndex]
-            match block['type']:
-                case 'StandardSpeedData' | 'TurboSpeedData' | 'TurboSpeedData' | 'PureTone' | 'PulseSequence' | 'PureData' | 'DirectRecording' | 'Pause':
-                    # found a meaningful block
-                    self.nextBlockIndex += 1
-                    return block
-                case 'JumpToBlock':
-                    self.nextBlockIndex += block['offset']
-
-                case 'LoopStart':
-                    self.loopToBlockIndex = self.nextBlockIndex + 1
-                    self.repeatCount = block['repeatCount']
-                    self.nextBlockIndex += 1
-
-                case 'LoopEnd':
-                    self.repeatCount -= 1
-                    if (self.repeatCount > 0):
-                        self.nextBlockIndex = self.loopToBlockIndex
-                    else:
-                        self.nextBlockIndex += 1
-
-                case 'CallSequence':
-                    # push the future destinations (where to go on reaching a ReturnFromSequence block)
-                    #    onto the call stack in reverse order, starting with the block immediately
-                    #    after the CallSequence (which we go to when leaving the sequence)
-                    self.callStack.unshift(self.nextBlockIndex+1)
-                    i = len(block['offsets']) - 1
-                    while i >= 0:
-                        self.callStack.unshift(self.nextBlockIndex + block['offsets'][i])
-                        i -= 1
-                    # now visit the first destination on the list
-                    self.nextBlockIndex = self.callStack.shift()
-
-                case 'ReturnFromSequence':
-                    self.nextBlockIndex = self.callStack.shift()
-
-                case default:
-                    # not one of the types we care about; skip past it
-                    self.nextBlockIndex += 1
-
-    def getNextLoadableBlock(self):
-        while True:
-            block = self.getNextMeaningfulBlock(True)
-            if (not block): return None
-            if (block['type'] == 'StandardSpeedData' or block['type'] == 'TurboSpeedData'):
-                return block['data']
-
-            # FIXME: avoid infinite loop if the TZX file consists only of meaningful but non-loadable blocks
-
-class TapeManager:
-    def __init__(self, machine):
-        self.machine = machine
-        self.window = machine.window
-        self.tape = TAPFile(None) # new tape
-        self.type = "TAP"
-        self.is_playing = False
-        self.auto_load = Config.get('tape.auto_load', False)
-        self.traps_enabled = 0
-        self.name = ""
-        self.filename = ""
-        self.count = 1
-        self.dirty = 0
-        self.patched = 0
-
-    def load(self, filename):
-        try:
-            with open(filename, 'rb') as file:
-                pf = os.path.split(filename)
-                tape_data = array("B")
-                tape_data.fromfile(file, os.stat(filename).st_size)
-                file_type = filename[-4:].lower()
-                if file_type == '.tap':
-                    if not TAPFile.is_valid(tape_data):
-                        messagebox.showerror(app_globals.APP_NAME, f'{filename}: Invalid TAP file')
-                    else:
-                        self.type = "TAP"
-                        self.name = pf[1]
-                        self.filename = filename
-                        self.window.status_bar.set_tape(self.name)
-                        self.tape = TAPFile(tape_data)
-                        self.is_playing = False
-
-                elif file_type == '.tzx':
-                    if not TZXFile.is_valid(tape_data):
-                        messagebox.showerror(app_globals.APP_NAME, f'{filename}: Invalid TZX file')
-                    else:
-                        self.type = "TZX"
-                        self.name = pf[1]
-                        self.filename = filename
-                        self.window.status_bar.set_tape(self.name)
-                        self.tape = TZXFile(tape_data)
-                        self.is_playing = False
-                else:
-                    messagebox.showerror(app_globals.APP_NAME, "Unmanaged tape format")
-                    return 0
-            return 1
-        except Exception as e:
-            messagebox.showerror(app_globals.APP_NAME, str(e))
-            return 0
-
-    def save(self):
-        if not self.dirty:
-            return 1
-
-        if self.filename == "":
-            title = f"{app_globals.APP_NAME} - Save {self.name}"
-            filename = filedialog.asksaveasfilename(title=title, filetypes=[('Tape TAP Format', '*.tap'), ('All files', '*.*')])
-            if not filename:
-                return 0
-        else:
-            filename = self.filename
-
-        # Save tape buffer
-        with open(filename, 'wb') as file:
-            self.tape.data.tofile(file)
-
-        self.dirty = 0
-        return 1
-
-    # https://skoolkid.github.io/rom/asm/0556.html
-    # https://retroisle.com/sinclair/zxspectrum/Technical/Firmware/TapeLoadingRoutine.php
-    def basic_load(self):
-        if not self.tape: return
-        block = self.tape.getNextLoadableBlock()
-        if not block:
-            return
-
-        # get expected block type and load vs verify flag from AF'
-        af_ = self.machine.cpu.get_af_()
-        expected_block_type = af_ >> 8
-        shouldLoad = af_ & 0x0001  # LOAD rather than VERIFY
-        addr = self.machine.cpu.get_ix()
-        requested_length = self.machine.cpu.get_de()
-        actual_block_type = block[0]
-        print(f"{expected_block_type=}, {actual_block_type=}, {requested_length=}, {len(block)=}")
-        success = True
-        if expected_block_type != actual_block_type:
-            success = False
-        else:
-            if shouldLoad:
-                offset = 1
-                loaded_bytes = 0
-                checksum = actual_block_type
-                while loaded_bytes < requested_length:
-                    if (offset >= len(block)):
-                        # have run out of bytes to load
-                        print(f"{offset=} >= {len(block)=}")
-                        success = False
-                        break
-                    byte = block[offset]
-                    offset += 1
-                    loaded_bytes += 1
-                    self.machine.mmu.poke(addr, byte)
-                    addr = (addr + 1) & 0xffff
-                    checksum ^= byte
-
-                # if loading is going right, we should still have a checksum byte left to read
-                success &= (offset < len(block))
-                if success:
-                    expectedc_checksum = block[offset]
-                    success = checksum == expectedc_checksum
-                else:
-                    # VERIFY. TODO: actually verify.
-                    print(f"{offset=} < {len(block)=}")
-                    success = True
-        if success:
-            # set carry to indicate success
-            self.machine.cpu.set_af(self.machine.cpu.get_af() | 0x0001)
-            # set IX to the same value as if the block had been loaded by the ROM routine
-            self.machine.cpu.set_ix(addr)
-            self.machine.cpu.set_de(0)
-        else:
-            # reset carry to indicate failure
-            print(f"{expectedc_checksum=} {checksum=}")
-            self.machine.cpu.set_af(self.machine.cpu.get_af() | 0xfffe)
-
-        self.machine.cpu.set_pc(0x05e2)  # address at which to exit the tape trap
-
-    # This class extracts data to be saved to tape, when the ROM routine
-    # SA-BYTES 0x04C2 has been reached and appends it to the currently opened TAP-file.
-    def basic_save(self):
-        tape_block_appended = False
-
-        block_length = self.machine.cpu.get_de()
-        block_start = self.machine.cpu.get_ix()
-        block_type = (self.machine.cpu.get_af() >> 8) & 0xff
-
-        block_data = bytearray([0] * (block_length + 4))
-
-        # The first two bytes of the block contains the data length plus the flag byte and the checksum.
-        block_data[0] = (block_length + 2) & 0xff
-        block_data[1] = ((block_length + 2) >> 8) &0xff
-
-        # The third byte is block type (flag byte).
-        block_data[2] = block_type
-
-        # The checksum is calculated by XOR the block data, includiung the block type.
-        checksum = block_type
-
-        # Get the block data from memory.
-        addr = block_start
+    def convert_block_data(self, block_length, file_content_index, zero_bit_pulse_length, one_bit_pulse_length, last_bits):
+        # process the block data
         for i in range(0, block_length):
-            block_data[3 + i] = self.machine.mmu.peek(addr)
-            checksum = checksum ^ block_data[3 + i]
-            addr = (addr + 1) & 0xffff
+            # step through every bit in every byte in the data block and create pulses.
+            value = self._file_content[file_content_index + i]
 
-        # Append the checksum.
-        block_data[3 + block_length] = checksum
-
-        if self.type == "TAP":
-            # Append the block to the currently opened TAP data.
-            self.tape.data.extend(block_data)
-            # Refresh the tape player listing.
-            self.tape.blocks = self.tape.get_blocks(self.tape.data)
-            # Indicate that the process was successful.
-            tape_block_appended = True
-            self.dirty = 1
-        #print(block_length, block_type, tape_block_appended)
-        return tape_block_appended
-
-    def play(self):
-        if self.name:
-            self.auto_load_tape()
-            self.is_playing = True
-
-    def auto_load_tape(self):
-        if self.auto_load:
-            filename = TAPE_LOADERS_BY_MACHINE[str(self.machine.type)]['default']
-            with open(filename, 'rb') as file:
-                loader = array("B")
-                loader.fromfile(file, os.stat(filename).st_size)
-                if filename.lower().endswith('.z80'):
-                    snap = parseZ80File(loader)
-                    return self.machine.load_snapshot(snap)
-                if filename.lower().endswith('.szx'):
-                    snap = parseSZXFile(loader)
-                    return self.machine.load_snapshot(snap)
-
-    def stop(self):
-        self.dirty = 0
-        self.type = ""
-        self.name = ""
-        self.filename = ""
-        self.tape.data = array("B")     # blank tape
-        self.is_playing = False
-
-    def set_traps(self, val):
-        self.traps_enabled = val
-        self.patch()
-
-    # rom patch with meta opcode ed cd and ed 02
-    def patch(self):
-        if self.machine.type == 48 or self.machine.type == 128:
-            if self.machine.type == 48:
-                rom_page = self.machine.SYS_ROM0_PAGE
+            # on the last byte in the block, check if all bits should be handled.
+            if i == block_length - 1:
+                used_bits = last_bits
             else:
-                rom_page = self.machine.SYS_ROM1_PAGE
-            ram = self.machine.mmu.get_page_ram(rom_page)
-            if self.traps_enabled:
-                # load
-                ram[0x056b] = 0xed
-                #ram[0x056c] = 0xcd  # luckily ed cd is not used
-                # save
-                ram[0x04c2] = 0xed
-                ram[0x04c3] = 0x02
-                self.patched = 1
-            else:
-                #restore original
-                ram[0x056b] = 0xc0
-                #ram[0x056c] = 0xcd
-                ram[0x04c2] = 0x21
-                ram[0x04c3] = 0x3f
-                self.patched = 0
+                used_bits = 8
 
+            # loop through the bits and create pulses.
+            for bit_index in range(0, used_bits):
+                bitvalue = (value & 128) // 128
+                if bitvalue == 0:
+                    self.signals.append(TapeSignal(number_of_pulses=2, pulse_length=zero_bit_pulse_length))
+                else:
+                    self.signals.append(TapeSignal(number_of_pulses=2, pulse_length=one_bit_pulse_length))
+
+                value <<= 1
+
+    def add_pause(self, pause_length):
+        if pause_length > 0:
+            self.signals.append(TapeSignal(number_of_pulses=1, pulse_length=pause_length * Tape.t_states_per_milli_second))
+
+    def get_byte(self, offset):
+        return self._file_content[self._file_content_index + offset]
+
+    def get_word(self, offset):
+        return int(self._file_content[self._file_content_index + offset] + 256 * self._file_content[self._file_content_index + 1 + offset])
+
+    def get_long_word(self, offset):
+        return (
+            self._file_content[self._file_content_index + offset]
+            + 256 * self._file_content[self._file_content_index + 1 + offset]
+            + 65536 * self._file_content[self._file_content_index + 2 + offset]
+        )
+
+    def get_double_word(self, offset):
+        return (
+            self._file_content[self._file_content_index + offset]
+            + 256 * self._file_content[self._file_content_index + 1 + offset]
+            + 65536 * self._file_content[self._file_content_index + 2 + offset]
+            + 16777216 * self._file_content[self._file_content_index + 3 + offset]
+        )
+
+    def check_for_eof(self, value):
+        if value > len(self._file_content):
+            self.file_error()
+            return True
+        else:
+            return False
+
+    def file_error(self):
+       messagebox.showerror(APP_NAME, "file read error.")

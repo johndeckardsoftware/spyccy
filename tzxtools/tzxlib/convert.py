@@ -163,7 +163,16 @@ def convertToAssembler(data, out, org=0):
             else:
                 line += '   '
         line += ' '
-        line += ins
+        line += ins + (' ' * (20 - len(ins)))
+        for x in range(0, length):
+            b = data[pos + x]
+            if b == 13: c = "\\r"
+            elif b == 10: c = "\\n"
+            elif b == 9: c = "\\t"
+            elif b <  32: c = "."
+            elif b <= 128: c = chr(b)
+            else: c = "."
+            line += c
         line += os.linesep
         #out.write(line.replace('\n', os.linesep).encode(getdefaultencoding()))
         out.write(line.encode(getdefaultencoding()))

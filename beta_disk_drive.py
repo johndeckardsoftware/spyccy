@@ -6,7 +6,7 @@
 
 import os
 from tkinter import messagebox, filedialog
-import app_globals
+from app_globals import APP_NAME
 
 class BetaDiskDrive:
     #
@@ -228,7 +228,7 @@ class BetaDiskDrive:
         self.number_of_tracks = self.number_of_tracks_per_side * self.number_of_sides
         self.size = self.number_of_sectors * self.bytes_per_sector * self.number_of_tracks
         if self.size != len(dim):
-            messagebox.showwarning(app_globals.APP_NAME, f"unmanaged disk size")    
+            messagebox.showwarning(APP_NAME, f"unmanaged disk size")    
             return 0
 
         # Create a jagged array [Track][Sector][Byte] to hold the TRD image data in a structure of track and sectors.
@@ -264,7 +264,7 @@ class BetaDiskDrive:
             if not self.filename is None:
                 filename = self.filename
             else:
-                title = f"{app_globals.APP_NAME} - Save {self.name}"
+                title = f"{APP_NAME} - Save {self.name}"
                 filename = filedialog.askopenfilename(title=title, filetypes=[('Disk TRD', '*.trd'), ('All files', '*.*')])
                 if not filename:
                     #emulation_unpause()
@@ -285,7 +285,7 @@ class BetaDiskDrive:
             return 1
 
         if self.dirty:
-            confirm = messagebox.askyesnocancel(app_globals.APP_NAME, f"{self.name} has been modified.\n" + "Do you want to save it?")
+            confirm = messagebox.askyesnocancel(APP_NAME, f"{self.name} has been modified.\n" + "Do you want to save it?")
             if confirm is True:         # yes
                 return self.save_disk()
             elif confirm is False:      # no

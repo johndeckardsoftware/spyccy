@@ -769,9 +769,10 @@ def zxbasic(input, output=None, stdout=None):
 
     # input
     args.append(input)
-
-    ret = zxbc.main(args)
-
+    try:
+        ret = zxbc.main(args)
+    except SystemExit as e:
+        ret = e
     sys.stderr = old_stderr
 
     #if ret:

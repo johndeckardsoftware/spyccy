@@ -188,7 +188,6 @@ class AYTuning():
         self.channels[self.channel].wave_tstate_samples = self.scale_t_samples.get()
 
     def mute_a(self):
-        print(self.var_a_mute.get())
         self.channels[0].mute(self.var_a_mute.get())
         Config.set(f'ay.py.a.muted', self.var_a_mute.get())
 

@@ -56,6 +56,7 @@ class AYController:
 		self.audio_bits = 16; #/* 16 or 8 bit */
 
 		self.set_audio_buffers(fps=Config.get('ay.c.fps', 35))
+		self.reset_audio_buffers = False
 
 		self.audio_abc_index = Config.get('ay.c.abc', 1)
 		self.stereo_high_volume = 0.9
@@ -91,8 +92,8 @@ class AYController:
 		self.audio_buf_1s_size = self.audio_freq * self.audio_frame_size
 		self.audio_buf_size = int(self.audio_buf_1s_size / self.audio_fps)
 		self.audio_buf_max_size = self.audio_buf_1s_size
-		self.audio_buf = array('b', [0] * self.audio_buf_max_size)
-		self.audio_buf_final = array('b')
+		self.audio_buf = array('B', [0] * self.audio_buf_max_size)
+		self.audio_buf_final = array('B')
 		self.audio_frame_count = 0
 
 	def init(self):
@@ -146,6 +147,10 @@ class AYController:
 	def mute(self, val):
 		self.muted = val
 
+	def set_stereo(self, val):
+		self.audio_chans = val + 1
+		self.reset_audio_buffers = True
+
 	def set_abc_order(self, val):
 		self.audio_abc_index = val
 		ret = self.libayemu.ayemu_set_stereo(val, self.ffi.NULL)
@@ -159,6 +164,10 @@ class AYController:
 	def run_frame_end(self):
 		if (self.registers[8] != 0 or self.registers[9] != 0 or self.registers[10] != 0) and not self.muted:
 			self.out_sound()
+
+		if self.reset_audio_buffers:
+			self.set_audio_buffers()
+			self.reset_audio_buffers = False
 
 	# Stops the player.
 	def stop(self):
@@ -181,8 +190,8 @@ def gen_sound(AY, tonea, toneb, tonec, noise, control, vola, volb, volc, envfreq
 	audio_bits = 16 #/* 16 or 8 bit */
 	audio_frame_size = audio_chans * (audio_bits >> 3)
 	audio_buf_size = int(audio_freq * audio_frame_size / audio_fps)
-	audio_buf = array('b', [0] * audio_buf_size)
-	audio_buf_final = array('b')
+	audio_buf = array('B', [0] * audio_buf_size)
+	audio_buf_final = array('B')
 
 	#/* setup regs */
 	regs = bytearray(14)

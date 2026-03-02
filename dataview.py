@@ -2,10 +2,10 @@ class DataView:
     def __init__(self, data):
         self.data = data
 
-    def getUint8(self, offset):
+    def get_uint8(self, offset):
         return self.data[offset]
 
-    def getUint16(self, offset, endian=False):
+    def get_uint16(self, offset, endian=False):
         b1 = self.data[offset]
         b2 = self.data[offset + 1]
         if endian:
@@ -13,7 +13,7 @@ class DataView:
         else:
             return (b1 << 8) | b2   # big-endian
 
-    def getUint32(self, offset, endian=False):
+    def get_uint32(self, offset, endian=False):
         b1 = self.data[offset]
         b2 = self.data[offset + 1]
         b3 = self.data[offset + 2]

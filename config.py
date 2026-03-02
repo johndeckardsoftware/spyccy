@@ -81,7 +81,7 @@ class Config(object):
 
         vars['machine.constrain'].set(Config.get('machine.constrain', 1))
         vars['machine.background'].set(Config.get('machine.background', 0))
-        vars['tape.enabled'].set(Config.get('tape.enabled', True))
+        vars['tape.fast_load'].set(Config.get('tape.fast_load', True))
         vars['tape.auto_load'].set(Config.get('tape.auto_load', True))
         vars['tape.block'].set(Config.get('tape.block', -1))
         vars['tape.converter'].set(Config.get('tape.converter', 'basic'))

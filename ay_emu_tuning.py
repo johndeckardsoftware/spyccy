@@ -147,17 +147,17 @@ class AYTuningEmu():
         Config.set(f'ay.c.fps', self.scale_fps.get())
 
     def mute_a(self):
-        print(f"a muted: {self.var_a_mute.get()}")
+        #print(f"a muted: {self.var_a_mute.get()}")
         self.channels[0]['muted'] = self.var_a_mute.get()
         Config.set(f'ay.c.a.muted', self.var_a_mute.get())
 
     def mute_b(self):
-        print(f"b muted: {self.var_a_mute.get()}")
+        #print(f"b muted: {self.var_a_mute.get()}")
         self.channels[1]['muted'] = self.var_b_mute.get()
         Config.set(f'ay.c.b.muted', self.var_b_mute.get())
 
     def mute_c(self):
-        print(f"c muted: {self.var_a_mute.get()}")
+        #print(f"c muted: {self.var_a_mute.get()}")
         self.channels[2]['muted'] = self.var_c_mute.get()
         Config.set(f'ay.c.c.muted', self.var_c_mute.get())
 

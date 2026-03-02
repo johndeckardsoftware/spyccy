@@ -5,13 +5,13 @@ import os, time, asyncio
 from array import array
 import app_globals
 from config import *
-import z80a5 as z80a
+import z80a as z80a
 from mmu import MemoryManager
 from display import TkScreenRenderer
 from display2 import SDLScreenRenderer
 from keyboard import OriginalKeyboardHandler, GamerKeyboardHandler, StandardKeyboardHandler
-from tape import TapeManager
-from snapshot import parseZ80File, parseSZXFile, parseSNAFile, create_snapshot
+from tape_manager import TapeManager
+from snapshot import parse_z80_file, parse_szx_file, parse_sna_file, create_snapshot
 from beeper import BeeperController
 from ay_controller import AYController
 from ay_emu_controller import AYController as AYControllerEmu
@@ -38,6 +38,7 @@ class ZXSpectrum48a:
         self.SYS_ROM0_WRITE_PAGE = 4
         self.beeper_process_frame = 5
         self.ay_process_frame = 1
+        self.tape_process_frame = 1
         self.constrain_50_fps = Config.get('machine.constrain', 0)
 
         # tape
@@ -74,12 +75,13 @@ class ZXSpectrum48a:
         self.window.status_bar.set_machine(self.name)
 
         # tape
-        self.tapedeck.set_traps(Config.get('tape.enabled', True))
+        self.tapedeck.tape_fast_load = Config.get('tape.fast_load', True)
+        self.tapedeck.patch()    # enable SAVE instruction via rom patch as an alternative to check pc against rom save routine
+        self.cpu.tapedeck = self.tapedeck
 
         # cpu
         self.cpu.mmu = self.mmu
         self.cpu.reset()
-        self.cpu.tape_traps_enabled = self.tapedeck.traps_enabled
         self.cpu.frame_cycle_count = self.frame_cycle_count
 
         # screen
@@ -142,6 +144,9 @@ class ZXSpectrum48a:
             print(self.joystick.info(full=1))
             if self.joystick.joycount == 0:
                 self.joystick = None
+            else:
+                self.window.vars['joystick.detected'].set(1)
+                self.window.set_joystick_entries()
         else:
             self.joystick = None
 
@@ -211,7 +216,8 @@ class ZXSpectrum48a:
                 if ret == 1:
                     raise Exception("unrecognised opcode")
                 elif ret == 2:
-                    self.tapedeck.basic_load()
+                    #self.tapedeck.basic_load()
+                    pass    #actually managed by TapeManager
                 else:
                     raise Exception(f"runFrame returned unexpected result: {ret}")
                 ret = self.cpu.resumeFrame()
@@ -230,6 +236,10 @@ class ZXSpectrum48a:
                 time_ms_end = time.monotonic()
                 app_globals.video_fps = (app_globals.video_fps + (time_ms_end - time_ms_start)) / 2
 
+            # tape 
+            if fc % self.tape_process_frame == 0:
+                self.tapedeck.run_frame_end()
+
             # stream beeper buffered sound
             if fc % self.beeper_process_frame == 0:
                 self.beeper.run_frame_end()
@@ -242,7 +252,7 @@ class ZXSpectrum48a:
                 pygame.event.pump()
 
             if self.constrain_50_fps and app_globals.frame_fps < 0.02:
-                await asyncio.sleep(0.028 - app_globals.frame_fps)
+                await asyncio.sleep(0.026 - app_globals.frame_fps)
 
             app_globals.frame_fps = (app_globals.frame_fps + (time.monotonic() - frame_ms_start)) / 2
             if fc % 250 == 0:
@@ -250,10 +260,13 @@ class ZXSpectrum48a:
                 self.window.status_bar.set_video_fps(str(round(app_globals.video_fps, 4)))
                 #self.window.status_bar.set_tk_fps(str(round(app_globals.tk_fps, 3)))
                 self.window.status_bar.set_fps(str(int(1 / (app_globals.frame_fps))))
-                if self.tapedeck.is_playing:
-                    self.window.status_bar.set_tape(self.tapedeck.name + app_globals.TAPE_PLAYING[self.tapedeck.count])
-                    self.tapedeck.count += 1
-                    if self.tapedeck.count > 1: self.tapedeck.count = 0
+                if self.tapedeck.is_tape_playing:
+                    self.window.status_bar.set_tape(self.tapedeck.file_name + app_globals.TAPE_PLAYING[self.tapedeck.count])
+                    #self.tapedeck.count += 1
+                    #if self.tapedeck.count > 1: self.tapedeck.count = 0
+                    self.tapedeck.count ^= 1
+                else:
+                    self.window.status_bar.set_tape(self.tapedeck.file_name)
 
             app_globals.frames_count += 1
 
@@ -295,25 +308,26 @@ class ZXSpectrum48a:
             with open(filename, 'rb') as file:
                 pf = os.path.split(filename)
                 self.window.status_bar.set_tape(pf[1])
-                arrayBuffer = array("B")
+                arrayBuffer = array('B')
                 arrayBuffer.fromfile(file, os.stat(filename).st_size)
                 file_type = filename[-4:].lower()
                 if file_type == '.z80':
-                    z80file = parseZ80File(arrayBuffer)
-                    return self.load_snapshot(z80file)
-
+                    snapshot = parse_z80_file(arrayBuffer)
                 elif file_type == '.szx':
-                    szxfile = parseSZXFile(arrayBuffer)
-                    return self.load_snapshot(szxfile)
-
+                    snapshot = parse_szx_file(arrayBuffer)
                 elif file_type == '.sna':
-                    snafile = parseSNAFile(arrayBuffer)
-                    return self.load_snapshot(snafile)
-
+                    snapshot = parse_sna_file(arrayBuffer)
                 else:
-                    self.window.status_bar.set_tape("unknow format")
+                    snapshot = None
+                    self.window.msgbox("Snapshot format unknow")
+
+                if snapshot:
+                    if snapshot['model'] == self.type:
+                        return self.load_snapshot(snapshot)
+                    else:
+                        self.window.msgbox(f"Snapshot only for ZX Spectrum {snapshot['model']}")
         except Exception as e:
-            self.window.msgbox(str(e))
+            self.window.msgbox(f"Error loading snapshot: {e}")
 
     def save_snapshot(self, file):
         self.pause(wait_eof=True)
@@ -331,9 +345,9 @@ class ZXSpectrum48a:
             elif what == 3: self.beeper_process_frame = val
         if self.AY:
             if what == 16: self.AY.mute(val)
-            if what == 17: self.AY.mute_channel(0, val)
-            if what == 18: self.AY.mute_channel(1, val)
-            if what == 19: self.AY.mute_channel(2, val)
+            elif what == 17: self.AY.mute_channel(0, val)
+            elif what == 18: self.AY.mute_channel(1, val)
+            elif what == 19: self.AY.mute_channel(2, val)
             elif what == 32: self.AY.set_stereo(val)
 
     # display

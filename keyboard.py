@@ -392,13 +392,13 @@ class BaseKeyboardHandler :
         self.window = window  # where we attach keyboard event listeners
         self.machine = machine
         self.eventsAreBound = False
-        self.keyStates = bytearray([0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff])
+        self.key_states = bytearray([0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff])
         # if True, the real symbol shift key is being held (as opposed to being active through a
         # virtual key combination)
-        self.symbolIsShifted = False
+        self.symbol_is_shifted = False
         # if True, the real caps shift key is being held (as opposed to being active through a
         # virtual key combination)
-        self.capsIsShifted = False
+        self.caps_is_shifted = False
         self.kempston_state = 0
 
     def start(self):
@@ -408,10 +408,10 @@ class BaseKeyboardHandler :
         self.eventsAreBound = False
 
     def vkey_down(self, row, mask):
-        self.keyStates[row] = (self.keyStates[row] & (~ mask))
+        self.key_states[row] = (self.key_states[row] & (~ mask))
 
     def vkey_up(self, row, mask):
-        self.keyStates[row] = (self.keyStates[row] | mask)
+        self.key_states[row] = (self.key_states[row] | mask)
 
     def send_key(self, row, mask, down):
         if down: self.vkey_down(row, mask)
@@ -422,8 +422,11 @@ class BaseKeyboardHandler :
         result = 0xbf
         for row in range(0, 8):
             if (not (addr & (1 << row))):
-                result &= self.keyStates[row]   # scan this keyboard row
+                result &= self.key_states[row]   # scan this keyboard row
         return result
+
+    def reset(self):
+        self.key_states = bytearray([0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff])
 
     def key_to_kempston(self, row, mask):
         #Handle Kempston joystick via the keyboard.
@@ -496,7 +499,6 @@ class StandardKeyboardHandler(BaseKeyboardHandler):
         super().__init__(window, machine)
         self.window.bind("<Key>", self.real_key_down)
         self.window.bind("<KeyRelease>", self.real_key_up)
-        #self.window.bind("PRINT", lambda x: print("PRINT"))
         self.help = None
         self.key_events_stack = []
         self.list_key_sequence = [

@@ -89,6 +89,175 @@ class Tab(ttk.Frame):
 
         return textbox
 
+class FindDialog:
+    # adapted from https://github.com/Morg207/TextEditor/blob/main/text-editor.py
+    def __init__(self, text_box):
+        self.text_box = text_box
+        self.find_window = self.setup_window()
+        self.window_frame = ttk.Frame(self.find_window, padding=(10,10,15,15))
+        find_frame = ttk.Frame(self.window_frame)
+        self.entry_frame = ttk.Frame(find_frame)
+        self.next_frame = ttk.Frame(find_frame)
+        self.dir_frame = ttk.Frame(find_frame)
+        self.direction_var = tk.StringVar()
+        self.user_input = tk.StringVar()
+        self.regex = ""
+        self.entry_text = ""
+        self.matches = []
+        self.clicked_next = False
+        self.find_index = -1
+        self.cursor_index = 0
+        self.word_var = tk.IntVar(value=1)
+        self.wrap_var = tk.IntVar(value=1)
+        self.match_all_var = tk.IntVar(value=0)
+        self.create_dialogue()
+        self.entry_frame.pack(fill="x", expand=True)
+        self.next_frame.pack(fill="x", expand=True)
+        self.dir_frame.pack(fill="x", expand=True)
+        find_frame.pack(fill="x")
+        self.window_frame.pack()
+
+    def setup_window(self):
+        find_window = tk.Toplevel()
+        find_window.transient(self.text_box.winfo_toplevel())
+        find_window.grab_set()
+        find_window.focus_force()
+        find_window.protocol("WM_DELETE_WINDOW", self.close)
+        find_window.title("SPYCCY - Editor - Find")
+        find_window.geometry(Config.get('app.editor_find.geometry', '200x100'))
+        find_window.iconphoto(False, app_globals.APP_ICON)
+        find_window.bind('<Configure>', self.configure_callback)
+        return find_window
+
+    def create_options(self):
+        options_label = ttk.Label(self.next_frame, text="Options:")
+        options_label.pack(side="left", padx=(0, 10))
+        whole_word_radio = ttk.Checkbutton(self.next_frame, variable=self.word_var, text="Whole word")
+        wrap_around_radio = ttk.Checkbutton(self.next_frame, variable=self.wrap_var, text="Wrap around")
+        match_all = ttk.Checkbutton(self.next_frame, text="Match all", variable=self.match_all_var)
+        whole_word_radio.pack(side="left")
+        wrap_around_radio.pack(side="left")
+        match_all.pack(side="left")
+
+    def create_dialogue(self):
+        self.create_options()
+        self.create_find_label()
+        self.create_find_entry()
+        self.create_close_button()
+        self.create_direction_label()
+        self.create_radio_buttons()
+        self.create_next_button()
+        
+    def create_find_label(self):
+        find_label = ttk.Label(self.entry_frame, text="Find:")
+        find_label.pack(side="left", padx=(0, 5))
+
+    def create_find_entry(self):
+        find_entry = ttk.Entry(self.entry_frame, width=55, textvariable=self.user_input)
+        find_entry.bind("<Return>", self.find)
+        find_entry.focus_set()
+        find_entry.pack(side="left", fill="x", expand=True)
+
+    def create_radio_buttons(self):
+        up_radio = ttk.Radiobutton(self.dir_frame, variable=self.direction_var, text="Up", value="Up")
+        down_radio = ttk.Radiobutton(self.dir_frame, variable=self.direction_var, text="Down", value="Down")
+        self.direction_var.set("Down")
+        up_radio.pack(side="left")
+        down_radio.pack(side="left")
+
+    def create_next_button(self):
+        next_button = ttk.Button(self.entry_frame, text="Find Next", command=self.find)
+        next_button.pack(side="right", anchor="e", padx=8)
+
+    def create_close_button(self):
+        close_button = ttk.Button(self.dir_frame, text="Close", command=self.close)
+        close_button.pack(side="right", anchor="e", padx=(0, 8), pady=(5, 0))
+
+    def create_direction_label(self):
+        direction_label = ttk.Label(self.dir_frame, text="Direction:")
+        direction_label.pack(side="left")
+
+    def configure_callback(self, event):
+        Config.set('app.editor_find.geometry', self.find_window.geometry())
+
+    def find_matches(self):
+        input_text = self.user_input.get()
+        if input_text != self.entry_text:
+            self.find_index = -1
+            self.entry_text = input_text
+        if self.word_var.get():
+            words = input_text.split()
+            self.regex = r'\b' + r'\b\s+\b'.join(map(re.escape, words)) + r'\b'
+        else:
+            self.regex = re.escape(input_text)
+        matches = list(re.finditer(self.regex, self.text_box.get("1.0", "end-1c")))
+        return matches
+
+    def find(self, event=None):
+        user_input = self.user_input.get()
+        if not user_input:
+            messagebox.showerror("Empty search error", "Error: invalid search.")
+            return
+        if not user_input.strip():
+            messagebox.showerror("Invalid search error", "Error: whitespace only searches not allowed.")
+            return
+        self.matches = self.find_matches()
+        if self.matches:
+            self.highlight_match()
+        else:
+            self.text_box.bell()
+
+    def highlight_match(self):
+        if not self.match_all_var.get():
+            self.clicked_next = True
+            direction = self.direction_var.get()
+            if direction == "Up":
+                self.find_index -= 1
+            else:
+                self.find_index += 1
+            self.clamp_match_index(direction)
+            current_match = self.matches[self.find_index]
+            start_index = self.text_box.index(f"1.0 + {current_match.start()} chars")
+            self.cursor_index = self.text_box.index(f"1.0 + {current_match.end()} chars")
+            self.configure_tags(start_index)
+            self.text_box.see(start_index)
+        else:
+            self.select_all_matches()
+
+    def select_all_matches(self):
+        self.text_box.tag_remove("fake_sel", "1.0", "end")
+        self.text_box.tag_remove("sel", "1.0", "end")
+        self.text_box.tag_configure("fake_sel", background="grey", foreground="white")
+        for match in self.matches:
+            start_index = self.text_box.index(f"1.0 + {match.start()} chars")
+            end_index = self.text_box.index(f"1.0 + {match.end()} chars")
+            self.text_box.tag_add("sel", start_index, end_index)
+            self.text_box.tag_add("fake_sel", start_index, end_index)
+
+    def clamp_match_index(self, direction):
+        wrap_around = self.wrap_var.get()
+        first_up_search = -2
+        if wrap_around and self.find_index != first_up_search:
+            self.find_index %= len(self.matches)
+        else:
+            last_match = len(self.matches)-1
+            if direction == "Up" and self.find_index < 0:
+                self.find_index = 0
+            elif direction == "Down" and self.find_index > last_match:
+                self.find_index = last_match
+
+    def configure_tags(self, start_index):
+        self.text_box.tag_remove("fake_sel", "1.0", "end")
+        self.text_box.tag_remove("sel", "1.0", "end")
+        self.text_box.tag_configure("fake_sel", background="grey", foreground="white")
+        self.text_box.tag_add("sel", start_index, self.cursor_index)
+        self.text_box.tag_add("fake_sel", start_index, self.cursor_index)
+
+    def close(self):
+        if self.cursor_index != 0:
+            self.text_box.mark_set("insert", self.cursor_index)
+        self.find_window.destroy()
+
 class Editor:
     def __init__(self, top_level, parent, file=None, text=None):
         self.master = top_level
@@ -138,6 +307,8 @@ class Editor:
         edit_menu.add_command(label="Paste", command=self.paste)
         edit_menu.add_command(label="Delete", command=self.delete)
         edit_menu.add_command(label="Select All", command=self.select_all)
+        edit_menu.add_separator()
+        edit_menu.add_command(label="Find", accelerator="Ctrl+F", command=self.find)
 
         # Format Menu
         format_menu = tk.Menu(menubar, tearoff=0)
@@ -181,13 +352,13 @@ class Editor:
         self.tab_right_click_menu.add_command(label="New Tab", command=self.new_file)
 
         # Keyboard / Click Bindings
-        self.master.bind_class('Text', '<Control-s>', self.save_file)
-        self.master.bind_class('Text', '<Control-o>', self.open_file)
-        self.master.bind_class('Text', '<Control-n>', self.new_file)
-        self.master.bind_class('Text', '<Control-a>', self.select_all)
-        self.master.bind_class('Text', '<Control-w>', self.close_tab)
-        self.master.bind_class('Text', '<Button-3>', self.right_click)
-
+        self.master.bind('<Control-s>', self.save_file)
+        self.master.bind('<Control-o>', self.open_file)
+        self.master.bind('<Control-n>', self.new_file)
+        self.master.bind('<Control-a>', self.select_all)
+        self.master.bind('<Control-w>', self.close_tab)
+        self.master.bind('<Button-3>', self.right_click)
+        self.master.bind("<Control-f>", self.find)
         #All below bindings are 1 position behind
         self.master.bind("<Button 1>", self.update_status_bar)
         self.master.bind("<Key>", self.update_status_bar)
@@ -356,6 +527,9 @@ class Editor:
         # If no text is selected.
         except tk.TclError:
             pass
+
+    def find(self, *args):
+        FindDialog(self.nb.current_tab().textbox)
 
     def wrap(self):
         if self.word_wrap.get() == True:

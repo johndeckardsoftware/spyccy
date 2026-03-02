@@ -13,6 +13,8 @@ class InOutManager:
         self.betadisk = machine.betadisk
         self.joystick = machine.joystick
         self.mouse = None
+        self.ear_input = 0
+        self.ULA_port_read_freq = 0
         self.frame_cycle_count = 0
         self.last_paging_value = 0
         self.last_ay_register = 0
@@ -21,6 +23,11 @@ class InOutManager:
         self.add_t_state = machine.cpu.add_t_state if machine.cpu else None
         self.inc_t_state = machine.cpu.inc_t_state if machine.cpu else None
 
+        # log
+        self.log_enabled = 1  # 0 = no log, 1 = log, 2 = full log
+        self.log_last_text = ""
+        self.log_same_as_last_count = 0
+
     def set_frame_cycle_count(self, value):
         self.frame_cycle_count = value
 
@@ -28,14 +35,14 @@ class InOutManager:
         result = 0xff
         addr_low = addr & 0xff
 
-        if (self.type == 1212):
+        #if (self.type == 1212):
             # on port reads, the test machine just responds with the high byte of the port address.
             # That's a thing now, RDR(I) decided. (Well, Phil Kendall decided it to be exact.)
-            result = (addr >> 8)
+        #    result = (addr >> 8)
 
         # The ULA functions (keybord and audio in) are accessible via all even numbered ports.
         # even if to avoid problems with other I/O devices only Port 0xfe should be used.
-        elif (addr & 0x0001) == 0:
+        if (addr & 0x0001) == 0:
             result = self.keyboard.poll((addr >> 8))
             #if result != 0xbf:
             #    self.log(f"in {self.get_t_state()} {hex(addr)} {hex(result)}")
@@ -46,6 +53,12 @@ class InOutManager:
 
                 #if result != 0xbf:
                 #    self.log(f"joy {self.get_t_state()} {hex(addr)} {hex(result)}")
+
+            # Add bit 6, the Ear input bit to the result. Note that on a real Spectrum, bit 6 is affected by
+            # what was last output to bits 3 and 4 according to https://worldofspectrum.org/faq/reference/48kreference.htm.
+            result |= self.ear_input
+
+            self.ULA_port_read_freq += 1
 
         elif (addr == 0xfffd):
             result = self.AY.read_register(self.AY.get_selected_register())
@@ -152,8 +165,23 @@ class InOutManager:
 
         self.add_t_state(4)
 
+    # debug
     def log(self, text):
+        if text == self.log_last_text:
+            self.log_same_as_last_count += 1
+            if self.log_same_as_last_count > 10000:
+                self.log_same_as_last_count = 0
+                s = f"(10000) {text}\n"
+            else:
+                return
+        else:
+            if self.log_same_as_last_count:
+                s = f"({self.log_same_as_last_count}) {self.log_last_text}\n{text}\n"
+                self.log_same_as_last_count = 0
+            else:
+                self.log_last_text = text
+                s = f"{text}\n"
+
         log = open('./tmp/ports.log', 'a')
-        log.write(text)
-        log.write("\n")
+        log.write(s)
         log.close

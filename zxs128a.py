@@ -54,12 +54,13 @@ class ZXSpectrum128a(ZXSpectrum48a):
         self.window.status_bar.set_machine(self.name)
 
         # tape
-        self.tapedeck.set_traps(Config.get('tape.enabled', True))
+        self.tapedeck.tape_fast_load = Config.get('tape.fast_load', True)
+        self.tapedeck.patch()    # enable SAVE instruction via rom patch as an alternative to check pc against rom save routine
+        self.cpu.tapedeck = self.tapedeck
 
         # cpu
         self.cpu.mmu = self.mmu
         self.cpu.reset()
-        self.cpu.tape_traps_enabled = self.tapedeck.traps_enabled
         self.cpu.frame_cycle_count = self.frame_cycle_count
 
         # screen

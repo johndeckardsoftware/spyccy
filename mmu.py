@@ -85,11 +85,11 @@ class MemoryManager:
         return addr
 
     def push16(self, addr:int, u16:int)->int:
-        hi = (u16 >> 8) & 0xff; lo = u16 & 0xff
+        #hi = (u16 >> 8) & 0xff; lo = u16 & 0xff
         addr = (addr - 1) & 0xffff
-        self.ram[self.page_write_map[(addr >> 14)]][addr & 0x3fff] = hi
+        self.ram[self.page_write_map[(addr >> 14)]][addr & 0x3fff] = (u16 >> 8) & 0xff #hi
         addr = (addr - 1) & 0xffff
-        self.ram[self.page_write_map[(addr >> 14)]][addr & 0x3fff] = lo
+        self.ram[self.page_write_map[(addr >> 14)]][addr & 0x3fff] = u16 & 0xff #lo
         self.add_t_state(7)
         return addr
 

@@ -101,7 +101,7 @@ class MainWindow():
         self.vars['machine.status'] = tk.StringVar()
         self.vars['machine.constrain'] = tk.IntVar()
         self.vars['machine.background'] = tk.IntVar()
-        self.vars['tape.enabled'] = tk.BooleanVar()
+        self.vars['tape.fast_load'] = tk.BooleanVar()
         self.vars['tape.auto_load'] = tk.BooleanVar()
         self.vars['tape.block'] = tk.IntVar()
         self.vars['tape.converter'] = tk.StringVar()
@@ -187,15 +187,18 @@ class MainWindow():
         # tape
         #
         tape_menu = Menu(menubar, tearoff=0)
-        tape_menu.add_checkbutton(label='Enabled', onvalue=True, offvalue=False, variable=self.vars['tape.enabled'],
-                                  command=self.set_tape_entries)
-        tape_menu.add_checkbutton(label='Auto Load', onvalue=True, offvalue=False, variable=self.vars['tape.auto_load'],
-                                  command=lambda: self.emulator.set_tape_auto_load(self.vars['tape.enabled'].get()))
-        tape_menu.add_separator()
+        #tape_menu.add_command(label='New', command=self.emulator.tape_new)
         tape_menu.add_command(label='Load...', command=self.open_tape_dialog)
         tape_menu.add_command(label='Play', command=self.emulator.tape_play)
-        tape_menu.add_command(label='Eject', command=self.tape_stop)
+        #tape_menu.add_command(label='Pause', command=self.emulator.tape_pause)
+        tape_menu.add_command(label='Stop', command=self.tape_stop)
         tape_menu.add_command(label='Save', command=self.emulator.tape_save)
+        tape_menu.add_separator()
+        tape_menu.add_checkbutton(label='Auto load', onvalue=True, offvalue=False, variable=self.vars['tape.auto_load'],
+                                  command=lambda: self.emulator.set_tape_auto_load(self.vars['tape.auto_load'].get()))
+        tape_menu.add_checkbutton(label='Fast load', onvalue=True, offvalue=False, variable=self.vars['tape.fast_load'],
+                                  command=lambda: self.emulator.set_tape_fast_load(self.vars['tape.fast_load'].get()))
+
         tape_menu.add_separator()
         tape_menu.add_command(label='Tape info...', command=self.tape_info)
         tape_block = tk.Menu(tape_menu, tearoff=0)
@@ -350,7 +353,7 @@ class MainWindow():
         sound_menu.add_checkbutton(label='AY muted', onvalue=1, offvalue=0, variable=self.vars[f'ay.{ay_emu}.muted'],
                                      command=lambda: self.emulator.set_sound(16, self.vars[f'ay.{ay_emu}.muted'].get()))
         sound_menu.add_command(label='AY Tuning', command=self.ay_tuning)
-        
+
         self.sound_menu = sound_menu
         menubar.add_cascade(label='Sound', menu=sound_menu)
 
@@ -373,7 +376,7 @@ class MainWindow():
         options_menu.add_cascade(label='Cartridge', menu=cartridge_menu, underline=0)
 
         options_menu.add_separator()
-        options_menu.add_checkbutton(label="Constrain 50 fps", onvalue=1, offvalue=0, variable=self.vars['machine.constrain'], command=self.constrain_50_fps)
+        options_menu.add_checkbutton(label="50 fps", onvalue=1, offvalue=0, variable=self.vars['machine.constrain'], command=self.constrain_50_fps)
 
         options_menu.add_separator()
         options_menu.add_command(label="Editor", command=lambda: self.show_editor())
@@ -434,14 +437,16 @@ class MainWindow():
         Config.update(self.vars)
         self.options_menu.entryconfigure(0, label=self.label_menu_rom(0))
         self.options_menu.entryconfigure(1, label=self.label_menu_rom(1))
+        self.set_tape_entries()
 
     def set_tape_entries(self):
-        if self.status_bar:
-            self.emulator.tape_enable(self.vars['tape.enabled'].get()) 
-        self.tape_menu.entryconfigure('Load...', state=self.tape_state())
         self.tape_menu.entryconfigure('Play', state=self.tape_state())
-        self.tape_menu.entryconfigure('Eject', state=self.tape_state())
-        self.tape_menu.entryconfigure('Save', state=self.tape_state())
+        #self.tape_menu.entryconfigure('Pause', state=self.tape_state())
+        self.tape_menu.entryconfigure('Stop', state=self.tape_state())
+        #self.tape_menu.entryconfigure('Save', state=self.tape_state())
+        self.tape_menu.entryconfigure('Select block', state=self.tape_info_state())
+        self.tape_menu.entryconfigure('Select converter', state=self.tape_info_state())
+        self.tape_menu.entryconfigure('Tape cat', state=self.tape_info_state())
 
     def set_disk_entries(self):
         Config.save_machine_vars(self.vars)
@@ -475,7 +480,10 @@ class MainWindow():
         return f"rom{id}: {pf[1]}"
 
     def tape_state(self):
-        return 'normal' if self.vars['tape.enabled'].get() else 'disabled'
+        return 'normal' if self.loaded_tape_file else 'disabled'
+
+    def tape_info_state(self):
+        return 'normal' if self.info_tape_file or self.loaded_tape_file else 'disabled'
 
     def disk_state(self):
         return 'normal' if self.vars['betadisk.enabled'].get() else 'disabled'
@@ -507,16 +515,16 @@ class MainWindow():
         self.editor.frame.focus_force()
 
     def open_tape_dialog(self):
-        if not self.vars['tape.enabled'].get(): return
+        if self.loaded_tape_file:
+            self.tape_stop()
         file_path = filedialog.askopenfilename(title='Select a file', filetypes=[('Tape', '*.tap'), ('Tape', '*.tzx'), ('All files', '*.*')])
         if file_path:
             self.loaded_tape_file = file_path
             self.emulator.tape_load(file_path)
 
     def tape_stop(self):
-        if not self.vars['tape.enabled'].get(): return
-        self.loaded_tape_file = None
         self.emulator.tape_stop()
+        self.loaded_tape_file = None
 
     def tape_info(self):
         file_path = filedialog.askopenfilename(title='Select a tape', filetypes=[('Tape', '*.tap'), ('Tape', '*.tzx'), ('All files', '*.*')])
