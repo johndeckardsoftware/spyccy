@@ -472,21 +472,21 @@ class OriginalKeyboardHandler(BaseKeyboardHandler):
                 self.send_key(SPECCY['CAPS_SHIFT']['row'], SPECCY['CAPS_SHIFT']['mask'], 'caps' in speccy_key)
                 self.send_key(SPECCY['SYMBOL_SHIFT']['row'], SPECCY['SYMBOL_SHIFT']['mask'], 'sym' in speccy_key)
             elif 'isCaps' in speccy_key:
-                self.capsIsShifted = True
+                self.caps_is_shifted = True
             elif 'isSymbol' in speccy_key:
-                self.symbolIsShifted = True
+                self.symbol_is_shifted = True
 
     def real_key_up(self, event):
         if event.keycode in KEY_CODES:
             speccy_key = KEY_CODES[event.keycode]
             self.send_key(speccy_key['row'], speccy_key['mask'], False)
             if 'caps' in speccy_key or 'sym' in speccy_key:
-                self.send_key(SPECCY['CAPS_SHIFT']['row'], SPECCY['CAPS_SHIFT']['mask'], self.capsIsShifted)
-                self.send_key(SPECCY['SYMBOL_SHIFT']['row'], SPECCY['SYMBOL_SHIFT']['mask'], self.symbolIsShifted)
+                self.send_key(SPECCY['CAPS_SHIFT']['row'], SPECCY['CAPS_SHIFT']['mask'], self.caps_is_shifted)
+                self.send_key(SPECCY['SYMBOL_SHIFT']['row'], SPECCY['SYMBOL_SHIFT']['mask'], self.symbol_is_shifted)
             elif 'isCaps' in speccy_key:
-                self.capsIsShifted = False
+                self.caps_is_shifted = False
             elif 'isSymbol' in speccy_key:
-                self.symbolIsShifted = False
+                self.symbol_is_shifted = False
 
     def show_help(self):
         if not self.help:
@@ -562,9 +562,9 @@ class StandardKeyboardHandler(BaseKeyboardHandler):
                 self.send_key(SPECCY['CAPS_SHIFT']['row'], SPECCY['CAPS_SHIFT']['mask'], 'caps' in speccy_key)
                 self.send_key(SPECCY['SYMBOL_SHIFT']['row'], SPECCY['SYMBOL_SHIFT']['mask'], 'sym' in speccy_key)
             elif 'isCaps' in speccy_key:
-                self.capsIsShifted = True
+                self.caps_is_shifted = True
             elif 'isSymbol' in speccy_key:
-                self.symbolIsShifted = True
+                self.symbol_is_shifted = True
 
             self.send_key(speccy_key['row'], speccy_key['mask'], True)
             self.key_events_stack.append(speccy_key)
@@ -575,12 +575,12 @@ class StandardKeyboardHandler(BaseKeyboardHandler):
             speccy_key = self.key_events_stack.pop(0)
             #self.log(str(speccy_key))
             if 'caps' in speccy_key or 'sym' in speccy_key:
-                self.send_key(SPECCY['CAPS_SHIFT']['row'], SPECCY['CAPS_SHIFT']['mask'], self.capsIsShifted)
-                self.send_key(SPECCY['SYMBOL_SHIFT']['row'], SPECCY['SYMBOL_SHIFT']['mask'], self.symbolIsShifted)
+                self.send_key(SPECCY['CAPS_SHIFT']['row'], SPECCY['CAPS_SHIFT']['mask'], self.caps_is_shifted)
+                self.send_key(SPECCY['SYMBOL_SHIFT']['row'], SPECCY['SYMBOL_SHIFT']['mask'], self.symbol_is_shifted)
             elif 'isCaps' in speccy_key:
-                self.capsIsShifted = False
+                self.caps_is_shifted = False
             elif 'isSymbol' in speccy_key:
-                self.symbolIsShifted = False
+                self.symbol_is_shifted = False
             self.send_key(speccy_key['row'], speccy_key['mask'], False)
 
     def show_help(self):
